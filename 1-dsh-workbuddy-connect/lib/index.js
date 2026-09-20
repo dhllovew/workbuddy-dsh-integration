@@ -1,4 +1,4 @@
-import { A as parseModelCatalog, B as fallbackChatIdentity, C as desktopAuthCandidatesFor, D as classifyUpstreamError, E as WorkBuddyUpstreamClient, F as probeModel, G as appUserAgent, H as resolveChatIdentity, I as randomSentinel, J as resolveAppVersion, K as installedAppVersion, L as CN_APP_VERSION_FILENAME, M as prepareInternationalChatBody, N as regionOf, O as modelWithCurrentPromotion, P as PROBE_EFFORT_CANDIDATES, R as FALLBACK_CN_APP_VERSION, S as defaultDesktopAuthPath, T as workbuddyOwnAuthPath, U as validCliVersion, V as readCliVersion, W as WORKBUDDY_APP_VERSION_FILENAME, Y as validAppVersion, _ as WorkBuddyCatalog, a as WORKBUDDY_HOST_HEARTBEAT_FILENAME, b as WorkBuddyCredentialStore, c as processStartTimeMs, d as writeHostHeartbeat, f as WORKBUDDY_CONNECT_VERSION, g as FALLBACK_WORKBUDDY_MODELS, h as FALLBACK_WORKBUDDY_AI_MODELS, i as variantFor, j as prepareChatBody, k as normalizeCredits, l as readHostHeartbeat, n as CN_VARIANT, o as clearHostHeartbeat, q as readBundleVersion, r as WORKBUDDY_VARIANTS, s as isHeartbeatProcessAlive, t as AI_VARIANT, u as workbuddyHostHeartbeatPath, v as WORKBUDDY_AUTH_FILENAME, w as parseWorkBuddyAuth, x as defaultDesktopAuthCandidates, y as WORKBUDDY_AUTH_FILE_ENV, z as chatUserAgent } from "./variants-CjJwnO6o.js";
+import { A as parseModelCatalog, B as fallbackChatIdentity, C as desktopAuthCandidatesFor, D as classifyUpstreamError, E as WorkBuddyUpstreamClient, F as probeModel, G as appUserAgent, H as resolveChatIdentity, I as randomSentinel, J as resolveAppVersion, K as installedAppVersion, L as CN_APP_VERSION_FILENAME, M as prepareInternationalChatBody, N as regionOf, O as modelWithCurrentPromotion, P as PROBE_EFFORT_CANDIDATES, R as FALLBACK_CN_APP_VERSION, S as defaultDesktopAuthPath, T as workbuddyOwnAuthPath, U as validCliVersion, V as readCliVersion, W as WORKBUDDY_APP_VERSION_FILENAME, Y as validAppVersion, _ as WorkBuddyCatalog, a as WORKBUDDY_HOST_HEARTBEAT_FILENAME, b as WorkBuddyCredentialStore, c as processStartTimeMs, d as writeHostHeartbeat, f as WORKBUDDY_CONNECT_VERSION, g as FALLBACK_WORKBUDDY_MODELS, h as FALLBACK_WORKBUDDY_AI_MODELS, i as variantFor, j as prepareChatBody, k as normalizeCredits, l as readHostHeartbeat, n as CN_VARIANT, o as clearHostHeartbeat, q as readBundleVersion, r as WORKBUDDY_VARIANTS, s as isHeartbeatProcessAlive, t as AI_VARIANT, u as workbuddyHostHeartbeatPath, v as WORKBUDDY_AUTH_FILENAME, w as parseWorkBuddyAuth, x as defaultDesktopAuthCandidates, y as WORKBUDDY_AUTH_FILE_ENV, z as chatUserAgent } from "./variants-Y2iT-yYA.js";
 import z from "@deepseek-ai/schemastery";
 import { dirname, join, resolve } from "node:path";
 import { resolveDshHome } from "@deepseek-ai/dsh-home-paths";
@@ -306,9 +306,21 @@ function createWorkBuddyAdapter(options) {
 	const { shim, store, catalog, resolveAttachments, observe } = options;
 	const providerId = options.providerId ?? "workbuddy";
 	const displayName = options.displayName ?? "WorkBuddy";
+	/**
+	* Every routable model descriptor, *ignoring* the user's selection.
+	*
+	* This backs the provider's model collection, which `dsh-llm-pi-ai` consults
+	* to resolve an id for a request (`modelOf` reads `snapshot.models`). It must
+	* therefore stay complete: an unselected model that could not be resolved
+	* here would fail with `UNKNOWN_MODEL`, so a saved session or a stored
+	* default naming it would break the moment the user narrowed the picker.
+	*
+	* The selection is applied one layer up, in `listModels`, which is the only
+	* surface the picker reads.
+	*/
 	const buildModels = () => {
 		const baseUrl = `${shim.baseUrl()}/v1`;
-		return catalog.current().map((info) => toPiModel(info, baseUrl, observe?.(info.id), providerId));
+		return catalog.available().map((info) => toPiModel(info, baseUrl, observe?.(info.id), providerId));
 	};
 	const provider = {
 		...createProvider({
@@ -378,8 +390,30 @@ var WorkBuddyPiAiAdapter = class extends PiAiAdapter {
 	infoFor(model) {
 		return this.catalog.current().find((entry) => entry.id === model);
 	}
+	/**
+	* Every model the catalog knows, *ignoring* the user's selection.
+	*
+	* Used by `resolveModel` so an id this plugin can still route to stays
+	* resolvable after the user unselects it. The picker's filter must never
+	* become a routing gate: a saved session or default model naming an
+	* unselected id would otherwise fail to resolve.
+	*/
+	anyInfoFor(model) {
+		return this.catalog.resolve(model);
+	}
+	/**
+	* The models the picker offers, after the user's selection.
+	*
+	* This is the *only* place the selection is applied. `super.listModels` reads
+	* the provider's collection, which deliberately carries every routable model
+	* so `resolveModel` keeps working; filtering here is what makes an unselected
+	* model disappear from DSH's selector without becoming unroutable.
+	*
+	* Visibility is read from the catalog at call time rather than computed from
+	* the descriptors, so a selection change is picked up by the next read.
+	*/
 	async listModels(provider) {
-		return (await super.listModels(provider)).map((model) => {
+		return (await super.listModels(provider)).filter((model) => this.catalog.isListed(model.id)).map((model) => {
 			const info = this.infoFor(model.id);
 			if (info === void 0) return model;
 			return {
@@ -390,7 +424,7 @@ var WorkBuddyPiAiAdapter = class extends PiAiAdapter {
 	}
 	async resolveModel(provider, model, signal) {
 		const resolved = await super.resolveModel(provider, model, signal);
-		const info = this.infoFor(model);
+		const info = this.anyInfoFor(model);
 		if (info === void 0) return resolved;
 		return {
 			...resolved,
@@ -1049,22 +1083,26 @@ async function workBuddyWebStatus(deps) {
 		...deps.probeKey === void 0 ? {} : { probeKey: deps.probeKey },
 		...deps.useMaximumContextWindow === void 0 ? {} : { useMaximumContextWindow: deps.useMaximumContextWindow() }
 	};
+	const selectable = deps.selection === void 0 ? probed : {
+		...probed,
+		selection: deps.selection()
+	};
 	try {
 		const credential = await deps.store.current();
 		if (credential !== void 0) {
 			const credits = await deps.client.fetchCredits(credential);
 			return {
-				...probed,
+				...selectable,
 				credits
 			};
 		}
 	} catch (error) {
 		return {
-			...probed,
+			...selectable,
 			creditsError: safeMessage(error)
 		};
 	}
-	return probed;
+	return selectable;
 }
 /** The status route's request handler, extracted so tests can mount it on a bare server. */
 function workBuddyStatusHandler(deps) {
@@ -1171,6 +1209,19 @@ function parseAction(text) {
 		action: "set-maximum-context-window",
 		enabled: wrapped["enabled"]
 	} : void 0;
+	if (action === "set-selected-models") {
+		const models = wrapped["selectedModels"];
+		if (models === null) return {
+			action: "set-selected-models",
+			selectedModels: null
+		};
+		if (!Array.isArray(models)) return void 0;
+		if (!models.every((entry) => typeof entry === "string")) return void 0;
+		return {
+			action: "set-selected-models",
+			selectedModels: models
+		};
+	}
 	if (action === "probe") {
 		const model = wrapped["model"];
 		if (typeof model !== "string" || model.trim() === "") return void 0;
@@ -1228,6 +1279,14 @@ function workBuddyProbeHandler(deps, key) {
 					return;
 				}
 				json(res, 200, await deps.setMaximumContextWindow(action.enabled === true));
+				return;
+			}
+			if (action.action === "set-selected-models") {
+				if (deps.setSelectedModels === void 0) {
+					json(res, 404, { error: "model-selection-not-supported" });
+					return;
+				}
+				json(res, 200, await deps.setSelectedModels(action.selectedModels === null ? void 0 : action.selectedModels));
 				return;
 			}
 			json(res, 200, await deps.probe(action.model));
@@ -1327,11 +1386,31 @@ const AUTH_FILE_AI_FIELD = z.string().description("WorkBuddy AI desktop auth fil
 /** Probe authorization (shared by the plugin schema and the CN section). */
 const PROBE_CONSENT_FIELD = z.boolean().default(false).description("Authorize reasoning-effort probes (each probe sends real requests that may consume credit)");
 const MAXIMUM_CONTEXT_WINDOW_FIELD = z.boolean().default(true).description("Use the largest context window declared by WorkBuddy AI when alternatives are available (on by default)");
+/**
+* Model selection fields, one per variant.
+*
+* Deliberately an array of ids rather than a per-model boolean map: the array
+* is what the settings document round-trips losslessly, and a model the
+* upstream retires would otherwise linger as a `false` key forever. Ids the
+* catalog no longer offers are reported by
+* {@link WorkBuddyCatalog.missingSelection} rather than silently dropped.
+*
+* The `z.const(undefined)` arm is load-bearing, not decoration. A bare
+* `z.array()` does not preserve absence: schemastery materializes an omitted
+* array as `[]`, which would make "never configured" indistinguishable from
+* "the user deselected everything" and silently empty every existing user's
+* model picker on upgrade. The union keeps an absent field truly absent, so
+* `undefined` reaches the catalog as "no preference".
+*/
+const SELECTED_MODELS_FIELD = z.union([z.array(z.string()), z.const(void 0)]).default(void 0).description("Model ids to show in DSH's model selector (leave unset to show every model the catalog offers)");
+const SELECTED_MODELS_AI_FIELD = z.union([z.array(z.string()), z.const(void 0)]).default(void 0).description("Model ids to show in DSH's model selector for WorkBuddy AI (leave unset to show every model)");
 const Config = z.object({
 	authFile: AUTH_FILE_FIELD,
 	authFileAI: AUTH_FILE_AI_FIELD,
 	probeConsent: PROBE_CONSENT_FIELD,
-	useMaximumContextWindow: MAXIMUM_CONTEXT_WINDOW_FIELD
+	useMaximumContextWindow: MAXIMUM_CONTEXT_WINDOW_FIELD,
+	selectedModels: SELECTED_MODELS_FIELD,
+	selectedModelsAI: SELECTED_MODELS_AI_FIELD
 });
 /**
 * The CN card's settings section: only the fields that card edits.
@@ -1344,12 +1423,14 @@ const Config = z.object({
 */
 const CN_SECTION = z.object({
 	authFile: AUTH_FILE_FIELD,
-	probeConsent: PROBE_CONSENT_FIELD
+	probeConsent: PROBE_CONSENT_FIELD,
+	selectedModels: SELECTED_MODELS_FIELD
 });
 /** The international card's settings section and its context-window preference. */
 const AI_SECTION = z.object({
 	authFileAI: AUTH_FILE_AI_FIELD,
-	useMaximumContextWindow: MAXIMUM_CONTEXT_WINDOW_FIELD
+	useMaximumContextWindow: MAXIMUM_CONTEXT_WINDOW_FIELD,
+	selectedModelsAI: SELECTED_MODELS_AI_FIELD
 });
 /** Stable identity key used by credentials, probe records, and catalog entries. */
 function credentialIdentity(credential) {
@@ -1440,6 +1521,29 @@ function catalogSection(runtime) {
 function isProbeCandidate(info) {
 	if (info.reasoning?.supports !== true) return false;
 	return (info.reasoning.supportedEfforts?.length ?? 0) === 0;
+}
+/**
+* Model selection for one card: what the catalog offers, what is chosen, and
+* what a previous choice can no longer be satisfied by.
+*
+* The offered list is *not* the filtered one: the UI must be able to show and
+* re-select a model the user previously turned off, so this reports every
+* catalog entry with its own `selected` flag. Reading `catalog.current()` here
+* would return only the chosen rows and make deselection irreversible.
+*/
+function selectionSection(runtime) {
+	const selection = runtime.catalog.selection();
+	const unconfigured = selection === void 0;
+	const chosen = selection === void 0 ? void 0 : new Set(selection);
+	return {
+		models: runtime.catalog.available().map((info) => ({
+			id: info.id,
+			name: info.name,
+			selected: unconfigured || chosen?.has(info.id) === true
+		})),
+		unconfigured,
+		unavailable: runtime.catalog.missingSelection()
+	};
 }
 /** Compact probe state for one card: consent, candidates, observations. */
 function probeSection(runtime, consent) {
@@ -1562,6 +1666,15 @@ function apply(ctx, config) {
 	const probeKey = createProbeKey();
 	let setMaximumContextWindow;
 	/**
+	* Persist one variant's model selection.
+	*
+	* Written through the settings service rather than straight into the catalog
+	* so the choice survives a restart and stays visible in the profile's
+	* settings document. `undefined` clears the field, restoring "no preference"
+	* (expose everything); `[]` records a deliberate empty selection.
+	*/
+	let setSelectedModels;
+	/**
 	* Point a variant at an account identity, invalidating whatever the previous
 	* one left behind.
 	*
@@ -1623,6 +1736,7 @@ function apply(ctx, config) {
 				models: () => runtime.catalog.current(),
 				catalog: () => catalogSection(runtime),
 				probe: () => probeSection(runtime, current().probeConsent === true),
+				selection: () => selectionSection(runtime),
 				probeKey,
 				...runtime.variant.id === CN_VARIANT.id ? {} : { useMaximumContextWindow: () => current().useMaximumContextWindow === true }
 			});
@@ -1636,6 +1750,13 @@ function apply(ctx, config) {
 				clear: () => {
 					runtime.probeStore.clear();
 					runtime.invalidate();
+				},
+				setSelectedModels: async (models) => {
+					if (setSelectedModels === void 0) return {
+						state: "failed",
+						reason: "settings are unavailable"
+					};
+					return setSelectedModels(runtime.variant.id, models);
 				},
 				refresh: async () => {
 					if (stopped) return {
@@ -1686,15 +1807,34 @@ function apply(ctx, config) {
 		const merged = () => ({
 			...sources.cn().authFile === void 0 ? {} : { authFile: sources.cn().authFile },
 			...sources.cn().probeConsent === void 0 ? {} : { probeConsent: sources.cn().probeConsent },
+			...sources.cn().selectedModels === void 0 ? {} : { selectedModels: sources.cn().selectedModels },
 			...sources.ai().authFileAI === void 0 ? {} : { authFileAI: sources.ai().authFileAI },
-			...sources.ai().useMaximumContextWindow === void 0 ? {} : { useMaximumContextWindow: sources.ai().useMaximumContextWindow }
+			...sources.ai().useMaximumContextWindow === void 0 ? {} : { useMaximumContextWindow: sources.ai().useMaximumContextWindow },
+			...sources.ai().selectedModelsAI === void 0 ? {} : { selectedModelsAI: sources.ai().selectedModelsAI }
 		});
+		/**
+		* Push each variant's selection into its catalog.
+		*
+		* Runs on every settings change and once at startup, and invalidates only
+		* the variants whose selection actually moved — `setSelection` reports
+		* that, so an unrelated settings write does not re-render every picker.
+		*
+		* The CN and international selections are kept apart because the two
+		* catalogs do not agree on which ids exist.
+		*/
+		const applySelection = (next) => {
+			for (const runtime of runtimes) {
+				const selection = runtime.variant.id === CN_VARIANT.id ? next.selectedModels : next.selectedModelsAI;
+				if (runtime.catalog.setSelection(selection)) runtime.invalidate();
+			}
+		};
 		const applyMaximumContextWindow = (next) => {
 			const runtime = runtimes.find((candidate) => candidate.variant.id !== CN_VARIANT.id);
 			if (runtime?.catalog.setUseMaximumContextWindow(next.useMaximumContextWindow === true)) runtime.invalidate();
 		};
 		const repointStores = () => {
 			const next = merged();
+			applySelection(next);
 			applyMaximumContextWindow(next);
 			for (const runtime of runtimes) runtime.store.setDesktopPath(configuredAuthFile(next, runtime.variant));
 		};
@@ -1702,6 +1842,7 @@ function apply(ctx, config) {
 			setSource(source) {
 				sources.cn = source;
 				current = merged;
+				applySelection(merged());
 			},
 			onChange: repointStores
 		});
@@ -1709,11 +1850,26 @@ function apply(ctx, config) {
 			setSource(source) {
 				sources.ai = source;
 				current = merged;
+				applySelection(merged());
 			},
 			onChange: repointStores
 		});
 		setMaximumContextWindow = async (enabled) => {
 			await settingsCtx.settings.update(WORKBUDDY_AI_SETTINGS_NS, { useMaximumContextWindow: enabled });
+			return { state: "updated" };
+		};
+		setSelectedModels = async (variantId, models) => {
+			const isCN = variantId === CN_VARIANT.id;
+			const ns = isCN ? WORKBUDDY_SETTINGS_NS : WORKBUDDY_AI_SETTINGS_NS;
+			const field = isCN ? "selectedModels" : "selectedModelsAI";
+			if (models === void 0) {
+				await settingsCtx.settings.mutate(ns, [{
+					op: "unset",
+					path: [field]
+				}]);
+				return { state: "updated" };
+			}
+			await settingsCtx.settings.update(ns, { [field]: models });
 			return { state: "updated" };
 		};
 	});

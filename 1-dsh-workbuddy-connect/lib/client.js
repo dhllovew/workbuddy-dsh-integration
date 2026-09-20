@@ -52,6 +52,341 @@ window.__ModuleLoader__.load({
 			return status === "error" && typeof wrapped["message"] === "string";
 		}
 		//#endregion
+		//#region src/client/WorkBuddyModelSelectionPanel.tsx
+		/**
+		* Model selection panel: choose which WorkBuddy models DSH's model selector
+		* offers.
+		*
+		* The plugin registers every catalog model with the Harness, and this panel is
+		* what narrows that to the ones a user actually wants in the picker. It is
+		* deliberately its own component rather than a section of the status card: the
+		* selection is a list-management task (search, filter, bulk toggle) whose state
+		* is mostly local, while the card is a status readout.
+		*
+		* Three facts drive the interaction, and each has a visible consequence:
+		*
+		* 1. **Unset is not empty.** An unconfigured plugin shows everything, so the
+		*    header says "all models" instead of a count of zero, and the reset action
+		*    is labelled as returning to that state rather than selecting none.
+		* 2. **Deselecting only hides.** A deselected model stays routable, so a saved
+		*    session naming one keeps working. The copy says "hidden from the picker"
+		*    rather than implying the model is gone.
+		* 3. **A selection can outlive its models.** If the upstream retires a chosen
+		*    model, the id stays in the stored selection and is reported separately, so
+		*    the user can see the choice was kept rather than silently dropped.
+		*
+		* @module dsh-workbuddy-connect/client/model-selection-panel
+		*/
+		/** How often the panel re-reads status while it is open. */
+		const POLL_INTERVAL_MS$1 = 6e4;
+		const panelStyle = {
+			display: "flex",
+			flexDirection: "column",
+			gap: 12
+		};
+		const summaryStyle = {
+			display: "flex",
+			alignItems: "baseline",
+			justifyContent: "space-between",
+			gap: 12,
+			flexWrap: "wrap"
+		};
+		const summaryTextStyle = {
+			margin: 0,
+			fontSize: 15,
+			fontWeight: 600,
+			color: "var(--dsw-alias-label-primary)"
+		};
+		const summaryHintStyle = {
+			margin: "2px 0 0",
+			fontSize: 13,
+			lineHeight: "18px",
+			color: "var(--dsw-alias-label-tertiary)"
+		};
+		const toolbarStyle = {
+			display: "flex",
+			gap: 8,
+			alignItems: "center",
+			flexWrap: "wrap"
+		};
+		const searchStyle = {
+			flex: "1 1 180px",
+			minWidth: 140,
+			boxSizing: "border-box",
+			minHeight: 32,
+			padding: "5px 10px",
+			border: "1px solid var(--dsw-alias-border-l2)",
+			borderRadius: 8,
+			background: "var(--dsw-alias-bg-layer-1)",
+			color: "var(--dsw-alias-label-primary)",
+			font: "inherit",
+			fontSize: 13
+		};
+		const buttonStyle$2 = {
+			boxSizing: "border-box",
+			minHeight: 32,
+			padding: "5px 12px",
+			border: "1px solid var(--dsw-alias-border-l2)",
+			borderRadius: 16,
+			background: "var(--dsw-alias-bg-layer-1)",
+			color: "var(--dsw-alias-label-primary)",
+			font: "inherit",
+			fontSize: 13,
+			cursor: "pointer"
+		};
+		const listStyle = {
+			maxHeight: 340,
+			overflowY: "auto",
+			border: "1px solid var(--dsw-alias-border-l2)",
+			borderRadius: 10,
+			padding: "4px 0"
+		};
+		const rowStyle$1 = {
+			display: "flex",
+			alignItems: "center",
+			gap: 10,
+			padding: "7px 12px",
+			cursor: "pointer"
+		};
+		const rowNameStyle = {
+			flex: 1,
+			minWidth: 0,
+			fontSize: 13.5,
+			color: "var(--dsw-alias-label-primary)",
+			overflow: "hidden",
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap"
+		};
+		const rowIdStyle = {
+			fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+			fontSize: 11,
+			color: "var(--dsw-alias-label-tertiary)"
+		};
+		const noticeStyle = {
+			margin: 0,
+			padding: "9px 12px",
+			borderRadius: 8,
+			fontSize: 12.5,
+			lineHeight: "18px",
+			background: "var(--dsw-alias-state-warning-subtle, rgba(214, 158, 46, 0.12))",
+			color: "var(--dsw-alias-state-warning-primary, #b7791f)"
+		};
+		const errorStyle$1 = {
+			margin: 0,
+			fontSize: 13,
+			color: "var(--dsw-alias-state-error-primary)"
+		};
+		const bodyStyle$1 = {
+			margin: 0,
+			fontSize: 13,
+			lineHeight: "20px",
+			color: "var(--dsw-alias-label-secondary)"
+		};
+		/** Read the status document for this variant. */
+		async function readStatus(path) {
+			try {
+				const response = await fetch(path, { headers: { accept: "application/json" } });
+				if (!response.ok) return void 0;
+				const parsed = await response.json();
+				return isWorkBuddyWebStatus(parsed) ? parsed : void 0;
+			} catch {
+				return;
+			}
+		}
+		/**
+		* Choose which catalog models the Harness model selector offers.
+		*
+		* @param props - the variant to manage plus its localized copy.
+		* @returns the selection panel.
+		*/
+		function WorkBuddyModelSelectionPanel(props) {
+			const { variant, t } = props;
+			const [status, setStatus] = (0, react.useState)(void 0);
+			const [query, setQuery] = (0, react.useState)("");
+			const [busy, setBusy] = (0, react.useState)(false);
+			const [error, setError] = (0, react.useState)(void 0);
+			const refresh = (0, react.useCallback)(async () => {
+				setStatus(await readStatus(variant.statusPath));
+			}, [variant.statusPath]);
+			(0, react.useEffect)(() => {
+				refresh();
+				const timer = setInterval(() => {
+					refresh();
+				}, POLL_INTERVAL_MS$1);
+				return () => {
+					clearInterval(timer);
+				};
+			}, [refresh]);
+			const selection = status?.status === "signed-in" ? status.selection : void 0;
+			const key = status?.status === "signed-in" ? status.probeKey : void 0;
+			/**
+			* Persist a selection.
+			*
+			* `models === undefined` clears the field, restoring "no preference" (every
+			* model is offered). An empty array is sent as `[]` and means the user
+			* deliberately wants nothing shown; the two must not be conflated.
+			*/
+			const write = (0, react.useCallback)(async (models) => {
+				if (key === void 0) {
+					setError(t("selectionNoKey"));
+					return;
+				}
+				setBusy(true);
+				setError(void 0);
+				try {
+					const response = await fetch(variant.probePath, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-WorkBuddy-Probe-Key": key
+						},
+						body: JSON.stringify({
+							action: "set-selected-models",
+							selectedModels: models ?? null
+						})
+					});
+					if (!response.ok) {
+						setError(`${t("selectionWriteFailed")} (${response.status})`);
+						return;
+					}
+					await refresh();
+				} catch (cause) {
+					setError(cause instanceof Error ? cause.message : String(cause));
+				} finally {
+					setBusy(false);
+				}
+			}, [
+				key,
+				refresh,
+				t,
+				variant.probePath
+			]);
+			const models = selection?.models ?? [];
+			const selectedIds = (0, react.useMemo)(() => new Set(models.filter((model) => model.selected).map((model) => model.id)), [models]);
+			const filtered = (0, react.useMemo)(() => {
+				const needle = query.trim().toLowerCase();
+				if (needle === "") return models;
+				return models.filter((model) => model.name.toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle));
+			}, [models, query]);
+			const toggle = (0, react.useCallback)((id, on) => {
+				const next = new Set(selectedIds);
+				if (on) next.add(id);
+				else next.delete(id);
+				write([...next]);
+			}, [selectedIds, write]);
+			if (status === void 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+				style: bodyStyle$1,
+				children: t("selectionLoading")
+			});
+			if (status.status !== "signed-in") return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+				style: bodyStyle$1,
+				children: t("selectionSignedOut")
+			});
+			if (selection === void 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+				style: bodyStyle$1,
+				children: t("selectionUnavailable")
+			});
+			const heading = selection.unconfigured ? t("selectionAll", { count: String(models.length) }) : t("selectionCount", {
+				selected: String(selectedIds.size),
+				total: String(models.length)
+			});
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				style: panelStyle,
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						style: summaryStyle,
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							style: summaryTextStyle,
+							children: heading
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							style: summaryHintStyle,
+							children: selection.unconfigured ? t("selectionUnconfiguredHint") : t("selectionHint")
+						})] }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							style: toolbarStyle,
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									style: buttonStyle$2,
+									disabled: busy,
+									onClick: () => {
+										write(models.map((model) => model.id));
+									},
+									children: t("selectionSelectAll")
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									style: buttonStyle$2,
+									disabled: busy,
+									onClick: () => {
+										write([]);
+									},
+									children: t("selectionSelectNone")
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+									type: "button",
+									style: buttonStyle$2,
+									disabled: busy || selection.unconfigured,
+									onClick: () => {
+										write(void 0);
+									},
+									children: t("selectionReset")
+								})
+							]
+						})]
+					}),
+					selection.unavailable.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+						style: noticeStyle,
+						children: t("selectionUnavailableModels", { models: selection.unavailable.join("、") })
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						style: toolbarStyle,
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
+							style: searchStyle,
+							value: query,
+							placeholder: t("selectionSearchPlaceholder"),
+							onChange: (event) => {
+								setQuery(event.target.value);
+							}
+						})
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						style: listStyle,
+						children: [filtered.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							style: {
+								...bodyStyle$1,
+								padding: "6px 12px"
+							},
+							children: t("selectionNoMatch")
+						}), filtered.map((model) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("label", {
+							style: rowStyle$1,
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
+									type: "checkbox",
+									checked: model.selected,
+									disabled: busy,
+									onChange: (event) => {
+										toggle(model.id, event.target.checked);
+									}
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									style: rowNameStyle,
+									children: model.name
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									style: rowIdStyle,
+									children: model.id
+								})
+							]
+						}, model.id))]
+					}),
+					error !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+						style: errorStyle$1,
+						children: error
+					})
+				]
+			});
+		}
+		//#endregion
 		//#region src/client/WorkBuddyPluginCard.tsx
 		/** WorkBuddy status card contributed to Harness Plugin configuration. */
 		/** CN WorkBuddy; the plugin's long-standing card and default. */
@@ -979,7 +1314,8 @@ window.__ModuleLoader__.load({
 								children: [
 									"status",
 									"context",
-									"details"
+									"details",
+									"selection"
 								].map((id) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									role: "tab",
@@ -991,7 +1327,7 @@ window.__ModuleLoader__.load({
 										...tabStyle,
 										...tab === id ? tabActiveStyle : {}
 									},
-									children: t(id === "status" ? "tabStatus" : id === "context" ? "tabContext" : "tabDetails")
+									children: t(id === "status" ? "tabStatus" : id === "context" ? "tabContext" : id === "details" ? "tabDetails" : "tabSelection")
 								}, id))
 							}),
 							tab === "status" ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
@@ -1065,7 +1401,17 @@ window.__ModuleLoader__.load({
 										t
 									}, model.id))]
 								})]
-							})
+							}),
+							tab === "selection" ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								style: tabPanelStyle,
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+									style: descriptionStyle,
+									children: t("selectionIntro")
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(WorkBuddyModelSelectionPanel, {
+									t,
+									variant
+								})]
+							}) : null
 						] }) : null,
 						status?.status === "signed-out" ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 							style: status.reason === void 0 ? bodyStyle : errorStyle,
@@ -1529,6 +1875,7 @@ window.__ModuleLoader__.load({
 			tabStatus: "Status",
 			tabContext: "Context window",
 			tabDetails: "Credit details",
+			tabSelection: "Models",
 			creditsDetailHeading: "By package",
 			creditsTotal: "Total: {total}",
 			creditsTotalUnlimited: "Total: Unlimited",
@@ -1593,7 +1940,24 @@ window.__ModuleLoader__.load({
 			probeResultUnknown: "Detection did not complete",
 			probeResultAt: "Detected {time}",
 			probeResultEmpty: "No detectable models right now.",
-			probeFailed: "Detection failed: {message}"
+			probeFailed: "Detection failed: {message}",
+			selectionHeading: "Model selector",
+			selectionIntro: "Choose which models appear in DSH's model selector. Models you hide stay usable by existing chats — only the picker list changes.",
+			selectionAll: "All {count} models are shown",
+			selectionCount: "{selected} of {total} models selected",
+			selectionUnconfiguredHint: "No selection has been made, so every model the catalog offers is shown.",
+			selectionHint: "Only the selected models appear in DSH's model selector.",
+			selectionSelectAll: "Select all",
+			selectionSelectNone: "Select none",
+			selectionReset: "Show all (clear selection)",
+			selectionUnavailableModels: "These selected models are no longer offered by WorkBuddy, so they cannot be shown: {models}. The selection is kept in case they return.",
+			selectionSearchPlaceholder: "Search models…",
+			selectionNoMatch: "No model matches that search.",
+			selectionLoading: "Loading models…",
+			selectionSignedOut: "Sign in to the WorkBuddy desktop app to choose models.",
+			selectionUnavailable: "Model selection is unavailable in this build.",
+			selectionNoKey: "Could not authorize the change — reopen this panel and try again.",
+			selectionWriteFailed: "Could not save the selection"
 		};
 		const zh = {
 			title: "DSH WorkBuddy Connect",
@@ -1612,6 +1976,7 @@ window.__ModuleLoader__.load({
 			tabStatus: "状态",
 			tabContext: "上下文窗口",
 			tabDetails: "积分详情",
+			tabSelection: "模型选择",
 			creditsDetailHeading: "按套餐",
 			creditsTotal: "合计：{total}",
 			creditsTotalUnlimited: "合计：不限额",
@@ -1676,7 +2041,24 @@ window.__ModuleLoader__.load({
 			probeResultUnknown: "检测未完成",
 			probeResultAt: "检测于 {time}",
 			probeResultEmpty: "当前没有可检测的模型。",
-			probeFailed: "检测失败：{message}"
+			probeFailed: "检测失败：{message}",
+			selectionHeading: "模型选择",
+			selectionIntro: "选择哪些模型出现在 DSH 的模型选择器里。被隐藏的模型对已有对话仍然可用，只是不再出现在选择列表中。",
+			selectionAll: "当前显示全部 {count} 个模型",
+			selectionCount: "已选择 {selected} / {total} 个模型",
+			selectionUnconfiguredHint: "尚未做过选择，因此目录中的全部模型都会显示。",
+			selectionHint: "只有被选中的模型会出现在 DSH 的模型选择器里。",
+			selectionSelectAll: "全选",
+			selectionSelectNone: "全不选",
+			selectionReset: "显示全部（清除选择）",
+			selectionUnavailableModels: "以下已选模型已不在 WorkBuddy 目录中，暂时无法显示：{models}。选择记录已保留，若日后恢复即可重新生效。",
+			selectionSearchPlaceholder: "搜索模型…",
+			selectionNoMatch: "没有匹配的模型。",
+			selectionLoading: "正在加载模型…",
+			selectionSignedOut: "请先在 WorkBuddy 桌面 App 中登录，然后即可选择模型。",
+			selectionUnavailable: "当前构建不支持模型选择。",
+			selectionNoKey: "无法授权本次修改——请重新打开该面板后再试。",
+			selectionWriteFailed: "保存选择失败"
 		};
 		//#endregion
 		//#region src/client/index.tsx

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { WorkBuddyCatalog } from '../src/catalog.ts'
 import { createWorkBuddyAdapter } from '../src/adapter.ts'
+import { Config as WorkBuddyConfig } from '../src/index.ts'
 import type { WorkBuddyModelInfo } from '../src/catalog.ts'
 import type { WorkBuddyCredentialStore } from '../src/auth.ts'
 import type { WorkBuddyShim } from '../src/shim.ts'
@@ -135,5 +136,60 @@ describe('WorkBuddy model selection', () => {
     catalog.setVisible(false)
     expect(catalog.current()).toEqual([])
     expect(catalog.selection()).toEqual(['beta'])
+  })
+
+  /**
+   * The schema must keep "never configured" distinguishable from "selected
+   * nothing".
+   *
+   * This is the trap the feature is most likely to fall into: schemastery
+   * materializes a plain `z.array()` field as `[]` when it is absent, which
+   * would silently turn every existing user's absent selection into an empty
+   * one and empty their model picker on upgrade. The field therefore uses a
+   * `z.union([z.array(...), z.const(undefined)])` arm, and this test is what
+   * stops a future simplification back to `z.array()` from going unnoticed.
+   */
+  it('keeps an absent selection distinct from an empty one through the schema', () => {
+    const absent = WorkBuddyConfig({})
+    expect(absent.selectedModels).toBeUndefined()
+    expect(absent.selectedModelsAI).toBeUndefined()
+
+    // An explicit empty array must survive as an empty array, not collapse to
+    // `undefined` — that is the user's deliberate "show nothing".
+    const cleared = WorkBuddyConfig({ selectedModels: [], selectedModelsAI: [] })
+    expect(cleared.selectedModels).toEqual([])
+    expect(cleared.selectedModelsAI).toEqual([])
+
+    // And a real selection round-trips verbatim.
+    const chosen = WorkBuddyConfig({ selectedModels: ['alpha', 'beta'] })
+    expect(chosen.selectedModels).toEqual(['alpha', 'beta'])
+  })
+
+  /**
+   * The routing surface must keep every model, *with* the projections the
+   * picker list applies.
+   *
+   * `available()` feeds the provider's model collection, which
+   * `dsh-llm-pi-ai` resolves ids against. It must therefore be unfiltered (or
+   * unselected models become `UNKNOWN_MODEL`) but otherwise identical to
+   * `current()` — dropping the context-window projection here silently changed
+   * a resolved model's `contextWindow`.
+   */
+  it('keeps the routing surface unfiltered but still projected', () => {
+    const catalog = new WorkBuddyCatalog([
+      { ...ALPHA, supportedContextWindows: [1_000, 4_000] },
+      BETA,
+    ])
+    catalog.setSelection(['alpha'])
+    catalog.setUseMaximumContextWindow(true)
+
+    // Unfiltered: both models remain routable although only one is selected.
+    expect(catalog.available().map(model => model.id)).toEqual(['alpha', 'beta'])
+    expect(catalog.current().map(model => model.id)).toEqual(['alpha'])
+
+    // Projected: the maximum-window preference applies to the routing surface
+    // too, so a resolved model reports the same window the picker advertises.
+    expect(catalog.available().find(model => model.id === 'alpha')?.contextWindow).toBe(4_000)
+    expect(catalog.current().find(model => model.id === 'alpha')?.contextWindow).toBe(4_000)
   })
 })

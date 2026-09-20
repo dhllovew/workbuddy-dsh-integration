@@ -124,23 +124,24 @@ export class WorkBuddyCatalog {
    */
   current(): readonly WorkBuddyModelInfo[] {
     if (!this.visible) return []
-    return this.listed().map(model => {
-      const current = modelWithCurrentPromotion(model)
-      const maximum = current.supportedContextWindows === undefined ? undefined : Math.max(...current.supportedContextWindows)
-      return this.useMaximumContextWindow && maximum !== undefined && maximum > current.contextWindow
-        ? { ...current, defaultContextWindow: current.defaultContextWindow ?? current.contextWindow, contextWindow: maximum }
-        : current
-    })
+    return this.project(this.listed())
   }
 
   /**
-   * Whether one model passes the user's selection, ignoring catalog visibility.
+   * Whether one model should be offered by the picker right now.
    *
-   * Kept separate from {@link current} so the listing filter does not inherit
-   * the visibility gate: `current()` returns nothing while a variant is signed
-   * out, and filtering the adapter's answer against it would make a signed-out
-   * variant's *already-registered* models disappear from an unrelated read.
+   * Combines the two independent gates: the variant must be exposing its
+   * catalog at all (signed in), and the model must pass the user's selection.
+   *
+   * Both are read as flags rather than by filtering against {@link current},
+   * because the adapter's listing also serves reads that are unrelated to
+   * credentials and must not observe a mid-registration empty snapshot.
    */
+  isListed(id: string): boolean {
+    return this.visible && this.passesSelection(id)
+  }
+
+  /** Whether one model passes the user's selection, ignoring catalog visibility. */
   passesSelection(id: string): boolean {
     return this.selected === undefined || this.selected.has(id)
   }
@@ -170,14 +171,30 @@ export class WorkBuddyCatalog {
   }
 
   /**
-   * Every model the catalog knows, *ignoring* the user's selection.
+   * Every model the catalog knows, *ignoring* both the selection and visibility.
    *
-   * The selection UI reads this: to let a user re-select a model they turned
-   * off, the list it renders must include the unselected rows. Routing uses
-   * {@link resolve}; the visible picker uses {@link current}.
+   * This is the routing surface: the adapter's provider collection and
+   * `resolveModel` read it, so it must carry the same descriptors
+   * {@link current} would produce — promotion projection and the
+   * maximum-context-window preference included — for every model the catalog
+   * holds, regardless of whether the picker currently shows it.
+   *
+   * Dropping either projection here would be a silent behavior change: the
+   * resolved context window and the display rate both come from them.
    */
   available(): readonly WorkBuddyModelInfo[] {
-    return this.models.map(model => modelWithCurrentPromotion(model))
+    return this.project(this.models)
+  }
+
+  /** Apply the promotion and context-window projections to a set of rows. */
+  private project(models: readonly WorkBuddyModelInfo[]): readonly WorkBuddyModelInfo[] {
+    return models.map(model => {
+      const current = modelWithCurrentPromotion(model)
+      const maximum = current.supportedContextWindows === undefined ? undefined : Math.max(...current.supportedContextWindows)
+      return this.useMaximumContextWindow && maximum !== undefined && maximum > current.contextWindow
+        ? { ...current, defaultContextWindow: current.defaultContextWindow ?? current.contextWindow, contextWindow: maximum }
+        : current
+    })
   }
 
   /**

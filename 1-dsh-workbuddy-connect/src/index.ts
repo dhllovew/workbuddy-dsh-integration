@@ -233,8 +233,13 @@ export interface Config {
    *
    * This filters visibility only. A model left out here stays resolvable, so
    * sessions and defaults that already name it keep working.
+   *
+   * Declared as `string[] | undefined` rather than the optional `selectedModels?`
+   * form because `exactOptionalPropertyTypes` distinguishes "absent" from
+   * "present and undefined", and the schema's `z.const(undefined)` arm
+   * deliberately produces the latter.
    */
-  selectedModels?: string[]
+  selectedModels?: string[] | undefined
   /**
    * The international variant's selection; same semantics as
    * {@link Config.selectedModels}.
@@ -243,7 +248,7 @@ export interface Config {
    * disagree about which ids exist and what they mean, so a selection made for
    * one must never be applied to the other.
    */
-  selectedModelsAI?: string[]
+  selectedModelsAI?: string[] | undefined
 }
 
 /** Explicit CN desktop auth-file path (shared by the plugin schema and its section). */
@@ -264,13 +269,16 @@ const MAXIMUM_CONTEXT_WINDOW_FIELD = z.boolean().default(true)
  * catalog no longer offers are reported by
  * {@link WorkBuddyCatalog.missingSelection} rather than silently dropped.
  *
- * No `.default([])`: schema defaults are applied on read, so a default empty
- * array would turn "never configured" into "selected nothing" for every
- * existing user and empty their model picker on upgrade.
+ * The `z.const(undefined)` arm is load-bearing, not decoration. A bare
+ * `z.array()` does not preserve absence: schemastery materializes an omitted
+ * array as `[]`, which would make "never configured" indistinguishable from
+ * "the user deselected everything" and silently empty every existing user's
+ * model picker on upgrade. The union keeps an absent field truly absent, so
+ * `undefined` reaches the catalog as "no preference".
  */
-const SELECTED_MODELS_FIELD = z.array(z.string())
+const SELECTED_MODELS_FIELD = z.union([z.array(z.string()), z.const(undefined)]).default(undefined)
   .description('Model ids to show in DSH\'s model selector (leave unset to show every model the catalog offers)')
-const SELECTED_MODELS_AI_FIELD = z.array(z.string())
+const SELECTED_MODELS_AI_FIELD = z.union([z.array(z.string()), z.const(undefined)]).default(undefined)
   .description('Model ids to show in DSH\'s model selector for WorkBuddy AI (leave unset to show every model)')
 
 export const Config: z<Config> = z.object({
@@ -879,10 +887,20 @@ export function apply(ctx: Context, config: Config): void {
     }
     setSelectedModels = async (variantId, models) => {
       const isCN = variantId === CN_VARIANT.id
-      await settingsCtx.settings.update(
-        isCN ? WORKBUDDY_SETTINGS_NS : WORKBUDDY_AI_SETTINGS_NS,
-        isCN ? { selectedModels: models } : { selectedModelsAI: models },
-      )
+      const ns = isCN ? WORKBUDDY_SETTINGS_NS : WORKBUDDY_AI_SETTINGS_NS
+      const field = isCN ? 'selectedModels' : 'selectedModelsAI'
+      if (models === undefined) {
+        // Clearing needs `mutate`+`unset`, not `update({ field: undefined })`.
+        // `update` merges the patch, and an `undefined` value is not a merge
+        // instruction — the stored array simply stays, so the "show all" action
+        // would silently do nothing. `unset` is the documented removal path a
+        // merge-only patch cannot express.
+        await settingsCtx.settings.mutate(ns, [{ op: 'unset', path: [field] }])
+        return { state: 'updated' }
+      }
+      // A deliberate empty array is written as-is: it means "show nothing",
+      // which is a different instruction from clearing the field.
+      await settingsCtx.settings.update(ns, { [field]: models })
       return { state: 'updated' }
     }
   })

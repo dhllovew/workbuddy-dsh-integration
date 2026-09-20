@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { E as WorkBuddyUpstreamClient, J as resolveAppVersion, b as WorkBuddyCredentialStore, f as WORKBUDDY_CONNECT_VERSION, g as FALLBACK_WORKBUDDY_MODELS, h as FALLBACK_WORKBUDDY_AI_MODELS, i as variantFor, l as readHostHeartbeat, n as CN_VARIANT, r as WORKBUDDY_VARIANTS, s as isHeartbeatProcessAlive, u as workbuddyHostHeartbeatPath } from "./variants-CjJwnO6o.js";
+import { E as WorkBuddyUpstreamClient, J as resolveAppVersion, b as WorkBuddyCredentialStore, f as WORKBUDDY_CONNECT_VERSION, g as FALLBACK_WORKBUDDY_MODELS, h as FALLBACK_WORKBUDDY_AI_MODELS, i as variantFor, l as readHostHeartbeat, n as CN_VARIANT, r as WORKBUDDY_VARIANTS, s as isHeartbeatProcessAlive, u as workbuddyHostHeartbeatPath } from "./variants-Y2iT-yYA.js";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 //#region src/bin.ts

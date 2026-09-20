@@ -368,12 +368,11 @@ class WorkBuddyPiAiAdapter extends PiAiAdapter {
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     const models = await super.listModels(provider)
     return models
-      // The selection only, never catalog visibility: the provider's collection
-      // is populated once at registration, while `current()` empties whenever
-      // the variant is signed out. Gating on visibility here would make a
-      // signed-out variant's registered rows vanish from reads that have
-      // nothing to do with credentials.
-      .filter(model => this.catalog.passesSelection(model.id))
+      // Two independent gates, both read as flags from the live catalog: the
+      // variant must be exposing its catalog at all (signed in), and the model
+      // must pass the user's selection. Reading `current()` here instead would
+      // re-derive the list and couple this read to snapshot timing.
+      .filter(model => this.catalog.isListed(model.id))
       .map(model => {
         const info = this.infoFor(model.id)
         if (info === undefined) return model

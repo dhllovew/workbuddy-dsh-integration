@@ -326,4 +326,108 @@ describe('WorkBuddy plugin card', () => {
     // The track renders no fill child, unlike a known percentage.
     expect(bar!.children).toHaveLength(0)
   })
+
+  /**
+   * Model selection lives behind its own tab, so these drive it through the
+   * card rather than mounting the panel directly: the tab wiring, the status
+   * read, and the write action all have to line up for the feature to work.
+   */
+  describe('model selection', () => {
+    /** Serve a status document carrying a selection section. */
+    function selectionStatus(overrides: {
+      unconfigured?: boolean
+      selected?: readonly string[]
+      unavailable?: readonly string[]
+    } = {}): void {
+      const selected = new Set(overrides.selected ?? [])
+      const unconfigured = overrides.unconfigured ?? false
+      status()
+      statusBody.selection = {
+        unconfigured,
+        models: [
+          { id: 'glm-5.3', name: 'GLM-5.3', selected: unconfigured || selected.has('glm-5.3') },
+          { id: 'kimi-k3-1', name: 'Kimi-K3', selected: unconfigured || selected.has('kimi-k3-1') },
+        ],
+        unavailable: overrides.unavailable ?? [],
+      }
+    }
+
+    /** The POST bodies the panel sent, in order. */
+    const posts = (): { action: string; selectedModels?: readonly string[] | null }[] =>
+      request.mock.calls
+        .filter(call => (call[1] as RequestInit | undefined)?.method === 'POST')
+        .map(call => JSON.parse(String((call[1] as RequestInit).body)) as { action: string })
+
+    /** Release every held POST and let the panel settle. */
+    const release = async (): Promise<void> => {
+      await act(async () => { for (const done of pendingPosts.splice(0)) done() })
+    }
+
+    it('says every model is shown while no selection has been made', async () => {
+      selectionStatus({ unconfigured: true })
+      await mount()
+      await press(en.tabSelection)
+
+      const rendered = JSON.stringify(view!.toJSON())
+      // Not "0 of 2 selected": an unset selection shows everything, and
+      // reporting a zero count would describe the opposite state.
+      expect(rendered).toContain(t('selectionAll', { count: '2' }))
+      expect(rendered).toContain(en.selectionUnconfiguredHint)
+    })
+
+    it('counts selected models once a selection exists', async () => {
+      selectionStatus({ selected: ['glm-5.3'] })
+      await mount()
+      await press(en.tabSelection)
+
+      const rendered = JSON.stringify(view!.toJSON())
+      expect(rendered).toContain(t('selectionCount', { selected: '1', total: '2' }))
+      expect(rendered).toContain(en.selectionHint)
+    })
+
+    it('writes the full effective set when the first box is unchecked', async () => {
+      // The critical case: while the field is unset the picker shows every
+      // model, so the user's first click means "everything except this one".
+      // Writing only the clicked id would silently hide the other model.
+      selectionStatus({ unconfigured: true })
+      await mount()
+      await press(en.tabSelection)
+
+      const box = view!.root.findAllByType('input').find(node => node.props.type === 'checkbox')!
+      await act(async () => { box.props.onChange({ target: { checked: false } }) })
+      await release()
+
+      expect(posts()).toHaveLength(1)
+      expect(posts()[0]!.action).toBe('set-selected-models')
+      expect(posts()[0]!.selectedModels).toEqual(['kimi-k3-1'])
+    })
+
+    it('sends an empty array for "select none" and null for "show all"', async () => {
+      selectionStatus({ selected: ['glm-5.3'] })
+      await mount()
+      await press(en.tabSelection)
+
+      await press(en.selectionSelectNone)
+      await release()
+      // An empty array is a real instruction ("show nothing"), not a reset.
+      expect(posts()[0]!.selectedModels).toEqual([])
+
+      await press(en.selectionReset)
+      await release()
+      // Clearing the field is sent as null, which the host turns into `unset`;
+      // it restores "no preference" rather than writing an empty list.
+      expect(posts()[1]!.selectedModels).toBeNull()
+    })
+
+    it('reports a selected model the catalog no longer offers', async () => {
+      selectionStatus({ selected: ['glm-5.3'], unavailable: ['hy4-preview'] })
+      await mount()
+      await press(en.tabSelection)
+
+      const rendered = JSON.stringify(view!.toJSON())
+      // Surfaced rather than dropped: the choice is kept, so the user can see
+      // it was remembered instead of wondering whether they ever made it.
+      expect(rendered).toContain(t('selectionUnavailableModels', { models: 'hy4-preview' }))
+    })
+  })
 })

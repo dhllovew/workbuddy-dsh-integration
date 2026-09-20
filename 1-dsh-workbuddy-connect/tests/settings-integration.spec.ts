@@ -243,7 +243,12 @@ describe('WorkBuddy Host settings integration', () => {
     }
     expect(fieldsOf('workbuddy')).toContain('authFile')
     expect(fieldsOf('workbuddy')).not.toContain('authFileAI')
-    expect(fieldsOf('workbuddy-ai')).toEqual(['authFileAI', 'useMaximumContextWindow'])
+    // Each section also carries only its own variant's model selection, for the
+    // same reason: the two catalogs do not agree on which ids exist, so one
+    // card's selection must never be writable through the other's form.
+    expect(fieldsOf('workbuddy')).toContain('selectedModels')
+    expect(fieldsOf('workbuddy')).not.toContain('selectedModelsAI')
+    expect(fieldsOf('workbuddy-ai')).toEqual(['authFileAI', 'useMaximumContextWindow', 'selectedModelsAI'])
 
     // A write through one section must reach ONLY that variant's store. The
     // schema assertions above prove the two forms are split; this proves the

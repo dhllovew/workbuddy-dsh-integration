@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { WORKBUDDY_AI_PROBE_PATH, WORKBUDDY_AI_STATUS_PATH, WORKBUDDY_PROBE_PATH, WORKBUDDY_STATUS_PATH } from '../status-paths.ts'
 import type { WorkBuddyWebModelBadge, WorkBuddyWebProbeSection, WorkBuddyWebStatus } from '../status-paths.ts'
 import { isWorkBuddyWebStatus } from './status-document.ts'
+import { WorkBuddyModelSelectionPanel } from './WorkBuddyModelSelectionPanel.tsx'
 import type { WorkBuddySettingsKey } from './locales.ts'
 
 /** Localized copy injected by the browser-plugin registration. */
@@ -599,7 +600,7 @@ export function WorkBuddyPluginCard({ t, variant = CN_CARD_VARIANT }: WorkBuddyP
   // carries; the two reference sets — context capacity, then rates and the
   // per-package breakdown — are deliberate visits, since neither changes while
   // you watch.
-  const [tab, setTab] = useState<'status' | 'context' | 'details'>('status')
+  const [tab, setTab] = useState<'status' | 'context' | 'details' | 'selection'>('status')
   const mounted = useRef(true)
   /**
    * Identity of the newest read that may write. Assigned when a read *starts*,
@@ -913,7 +914,7 @@ export function WorkBuddyPluginCard({ t, variant = CN_CARD_VARIANT }: WorkBuddyP
                     * decision-relevant.
                     */}
                   <div role="tablist" style={tabBarStyle}>
-                    {(['status', 'context', 'details'] as const).map(id => (
+                    {(['status', 'context', 'details', 'selection'] as const).map(id => (
                       <button
                         key={id}
                         type="button"
@@ -922,7 +923,7 @@ export function WorkBuddyPluginCard({ t, variant = CN_CARD_VARIANT }: WorkBuddyP
                         onClick={() => { setTab(id) }}
                         style={{ ...tabStyle, ...(tab === id ? tabActiveStyle : {}) }}
                       >
-                        {t(id === 'status' ? 'tabStatus' : id === 'context' ? 'tabContext' : 'tabDetails')}
+                        {t(id === 'status' ? 'tabStatus' : id === 'context' ? 'tabContext' : id === 'details' ? 'tabDetails' : 'tabSelection')}
                       </button>
                     ))}
                   </div>
@@ -999,6 +1000,15 @@ export function WorkBuddyPluginCard({ t, variant = CN_CARD_VARIANT }: WorkBuddyP
                       )}
                     </div>
                   )}
+                  {/* The selection panel owns its own status read and writes:
+                      the selection is list-management state, and mounting it
+                      only for this tab keeps its polling off the other tabs. */}
+                  {tab === 'selection' ? (
+                    <div style={tabPanelStyle}>
+                      <p style={descriptionStyle}>{t('selectionIntro')}</p>
+                      <WorkBuddyModelSelectionPanel t={t} variant={variant} />
+                    </div>
+                  ) : null}
                 </>
               : null}
             {status?.status === 'signed-out'

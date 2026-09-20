@@ -2620,13 +2620,87 @@ var WorkBuddyCatalog = class {
 	models;
 	visible = true;
 	useMaximumContextWindow = false;
+	/**
+	* The user's model selection, or `undefined` while never configured.
+	*
+	* `undefined` and an empty set mean deliberately different things: the first
+	* is "the user has expressed no preference", which must keep exposing the
+	* whole catalog so an upgrade cannot silently empty a model picker; the
+	* second is "the user deselected everything", which is a real request for an
+	* empty list. Collapsing them would make an unconfigured plugin and a
+	* deliberately-cleared one indistinguishable.
+	*/
+	selected;
 	constructor(initial = FALLBACK_WORKBUDDY_MODELS) {
 		this.models = initial;
 	}
-	/** Current entries; empty while the variant has no usable credential. */
+	/**
+	* Current entries; empty while the variant has no usable credential.
+	*
+	* This is the *visible* list: the model picker, the shim's `/v1/models`, and
+	* the status document all read it, so the user's selection applies
+	* everywhere at once. `resolve()` below is the one deliberate exception.
+	*/
 	current() {
 		if (!this.visible) return [];
-		return this.models.map((model) => {
+		return this.project(this.listed());
+	}
+	/**
+	* Whether one model should be offered by the picker right now.
+	*
+	* Combines the two independent gates: the variant must be exposing its
+	* catalog at all (signed in), and the model must pass the user's selection.
+	*
+	* Both are read as flags rather than by filtering against {@link current},
+	* because the adapter's listing also serves reads that are unrelated to
+	* credentials and must not observe a mid-registration empty snapshot.
+	*/
+	isListed(id) {
+		return this.visible && this.passesSelection(id);
+	}
+	/** Whether one model passes the user's selection, ignoring catalog visibility. */
+	passesSelection(id) {
+		return this.selected === void 0 || this.selected.has(id);
+	}
+	/** Whether one model passes the user's selection; the filter's single predicate. */
+	isSelected(id) {
+		return this.passesSelection(id);
+	}
+	/** The catalog narrowed to the user's selection, before promotion/context projection. */
+	listed() {
+		if (this.selected === void 0) return this.models;
+		return this.models.filter((model) => this.isSelected(model.id));
+	}
+	/**
+	* Resolve one model by id for an outgoing request, *ignoring* the selection.
+	*
+	* Filtering is a visibility concern, not a routability one. A session or a
+	* saved default that names a now-unselected model must keep working: turning
+	* the picker filter into a routing gate would break conversations the user
+	* already has, which is a far worse failure than showing one extra model.
+	* Returns undefined for an id the catalog never had.
+	*/
+	resolve(id) {
+		return this.models.find((model) => model.id === id);
+	}
+	/**
+	* Every model the catalog knows, *ignoring* both the selection and visibility.
+	*
+	* This is the routing surface: the adapter's provider collection and
+	* `resolveModel` read it, so it must carry the same descriptors
+	* {@link current} would produce — promotion projection and the
+	* maximum-context-window preference included — for every model the catalog
+	* holds, regardless of whether the picker currently shows it.
+	*
+	* Dropping either projection here would be a silent behavior change: the
+	* resolved context window and the display rate both come from them.
+	*/
+	available() {
+		return this.project(this.models);
+	}
+	/** Apply the promotion and context-window projections to a set of rows. */
+	project(models) {
+		return models.map((model) => {
 			const current = modelWithCurrentPromotion(model);
 			const maximum = current.supportedContextWindows === void 0 ? void 0 : Math.max(...current.supportedContextWindows);
 			return this.useMaximumContextWindow && maximum !== void 0 && maximum > current.contextWindow ? {
@@ -2635,6 +2709,44 @@ var WorkBuddyCatalog = class {
 				contextWindow: maximum
 			} : current;
 		});
+	}
+	/**
+	* The user's selection as ids, or `undefined` while unconfigured.
+	*
+	* Callers must preserve the distinction: `undefined` renders as "all
+	* selected", an empty array as "none selected".
+	*/
+	selection() {
+		return this.selected === void 0 ? void 0 : [...this.selected];
+	}
+	/**
+	* Ids the user selected that the current catalog no longer offers.
+	*
+	* The catalog is refreshed from upstream, so a selected model can vanish
+	* (a promotion ends, a preview is retired). Reporting the difference lets the
+	* UI say so instead of quietly dropping a choice the user made.
+	*/
+	missingSelection() {
+		if (this.selected === void 0) return [];
+		const present = new Set(this.models.map((model) => model.id));
+		return [...this.selected].filter((id) => !present.has(id)).sort();
+	}
+	/**
+	* Apply the user's selection. Returns whether it changed, so the caller can
+	* skip an invalidation that would re-render an identical list.
+	*/
+	setSelection(selected) {
+		const next = selected === void 0 ? void 0 : new Set(selected);
+		if (this.sameSelection(next)) return false;
+		this.selected = next;
+		return true;
+	}
+	/** Whether a candidate selection equals the current one, order-insensitively. */
+	sameSelection(next) {
+		if (next === void 0 || this.selected === void 0) return next === this.selected;
+		if (next.size !== this.selected.size) return false;
+		for (const id of next) if (!this.selected.has(id)) return false;
+		return true;
 	}
 	/** Replace the list; callers invalidate their adapter snapshot after this. */
 	set(models) {

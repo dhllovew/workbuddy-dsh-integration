@@ -800,9 +800,90 @@ declare class WorkBuddyCatalog {
   private models;
   private visible;
   private useMaximumContextWindow;
+  /**
+   * The user's model selection, or `undefined` while never configured.
+   *
+   * `undefined` and an empty set mean deliberately different things: the first
+   * is "the user has expressed no preference", which must keep exposing the
+   * whole catalog so an upgrade cannot silently empty a model picker; the
+   * second is "the user deselected everything", which is a real request for an
+   * empty list. Collapsing them would make an unconfigured plugin and a
+   * deliberately-cleared one indistinguishable.
+   */
+  private selected;
   constructor(initial?: readonly WorkBuddyModelInfo[]);
-  /** Current entries; empty while the variant has no usable credential. */
+  /**
+   * Current entries; empty while the variant has no usable credential.
+   *
+   * This is the *visible* list: the model picker, the shim's `/v1/models`, and
+   * the status document all read it, so the user's selection applies
+   * everywhere at once. `resolve()` below is the one deliberate exception.
+   */
   current(): readonly WorkBuddyModelInfo[];
+  /**
+   * Whether one model should be offered by the picker right now.
+   *
+   * Combines the two independent gates: the variant must be exposing its
+   * catalog at all (signed in), and the model must pass the user's selection.
+   *
+   * Both are read as flags rather than by filtering against {@link current},
+   * because the adapter's listing also serves reads that are unrelated to
+   * credentials and must not observe a mid-registration empty snapshot.
+   */
+  isListed(id: string): boolean;
+  /** Whether one model passes the user's selection, ignoring catalog visibility. */
+  passesSelection(id: string): boolean;
+  /** Whether one model passes the user's selection; the filter's single predicate. */
+  private isSelected;
+  /** The catalog narrowed to the user's selection, before promotion/context projection. */
+  private listed;
+  /**
+   * Resolve one model by id for an outgoing request, *ignoring* the selection.
+   *
+   * Filtering is a visibility concern, not a routability one. A session or a
+   * saved default that names a now-unselected model must keep working: turning
+   * the picker filter into a routing gate would break conversations the user
+   * already has, which is a far worse failure than showing one extra model.
+   * Returns undefined for an id the catalog never had.
+   */
+  resolve(id: string): WorkBuddyModelInfo | undefined;
+  /**
+   * Every model the catalog knows, *ignoring* both the selection and visibility.
+   *
+   * This is the routing surface: the adapter's provider collection and
+   * `resolveModel` read it, so it must carry the same descriptors
+   * {@link current} would produce — promotion projection and the
+   * maximum-context-window preference included — for every model the catalog
+   * holds, regardless of whether the picker currently shows it.
+   *
+   * Dropping either projection here would be a silent behavior change: the
+   * resolved context window and the display rate both come from them.
+   */
+  available(): readonly WorkBuddyModelInfo[];
+  /** Apply the promotion and context-window projections to a set of rows. */
+  private project;
+  /**
+   * The user's selection as ids, or `undefined` while unconfigured.
+   *
+   * Callers must preserve the distinction: `undefined` renders as "all
+   * selected", an empty array as "none selected".
+   */
+  selection(): readonly string[] | undefined;
+  /**
+   * Ids the user selected that the current catalog no longer offers.
+   *
+   * The catalog is refreshed from upstream, so a selected model can vanish
+   * (a promotion ends, a preview is retired). Reporting the difference lets the
+   * UI say so instead of quietly dropping a choice the user made.
+   */
+  missingSelection(): readonly string[];
+  /**
+   * Apply the user's selection. Returns whether it changed, so the caller can
+   * skip an invalidation that would re-render an identical list.
+   */
+  setSelection(selected: readonly string[] | undefined): boolean;
+  /** Whether a candidate selection equals the current one, order-insensitively. */
+  private sameSelection;
   /** Replace the list; callers invalidate their adapter snapshot after this. */
   set(models: readonly WorkBuddyModelInfo[]): void;
   /** Whether this variant's models are exposed at all. */
@@ -1228,6 +1309,32 @@ interface Config {
   probeConsent?: boolean;
   /** Use the largest context window the international catalog explicitly offers. */
   useMaximumContextWindow?: boolean;
+  /**
+   * Model ids to expose in DSH's model selector, for this variant.
+   *
+   * Absent means "the user has expressed no preference": every catalog model is
+   * offered, so an upgrade cannot silently empty an existing picker. An empty
+   * array is a real request for an empty list and is kept distinct from absent
+   * — see {@link WorkBuddyCatalog.setSelection}.
+   *
+   * This filters visibility only. A model left out here stays resolvable, so
+   * sessions and defaults that already name it keep working.
+   *
+   * Declared as `string[] | undefined` rather than the optional `selectedModels?`
+   * form because `exactOptionalPropertyTypes` distinguishes "absent" from
+   * "present and undefined", and the schema's `z.const(undefined)` arm
+   * deliberately produces the latter.
+   */
+  selectedModels?: string[] | undefined;
+  /**
+   * The international variant's selection; same semantics as
+   * {@link Config.selectedModels}.
+   *
+   * A separate field rather than one shared list because the two catalogs
+   * disagree about which ids exist and what they mean, so a selection made for
+   * one must never be applied to the other.
+   */
+  selectedModelsAI?: string[] | undefined;
 }
 declare const Config: z<Config>;
 /**
