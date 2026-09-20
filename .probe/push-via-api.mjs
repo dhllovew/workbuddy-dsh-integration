@@ -32,16 +32,29 @@ function git(...args) {
   return gitBuffer(...args).toString('utf8')
 }
 
-/** Authenticated GitHub API call. */
+/** Authenticated GitHub API call, retrying transport-level failures. */
 function api(path, { method = 'GET', body } = {}) {
   const args = ['api', '-X', method, path, '-H', 'Accept: application/vnd.github+json']
   if (body !== undefined) args.push('--input', '-')
-  const out = execFileSync('gh', args, {
-    encoding: 'utf8',
-    input: body === undefined ? undefined : JSON.stringify(body),
-    maxBuffer: 512 * 1024 * 1024,
-  })
-  return out.trim() === '' ? undefined : JSON.parse(out)
+  let last
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const out = execFileSync('gh', args, {
+        encoding: 'utf8',
+        input: body === undefined ? undefined : JSON.stringify(body),
+        maxBuffer: 512 * 1024 * 1024,
+      })
+      return out.trim() === '' ? undefined : JSON.parse(out)
+    } catch (error) {
+      last = error
+      // Retry only transport failures; a 4xx is a real rejection and must
+      // surface rather than being retried into a timeout.
+      if (!/timeout|reset|EOF|handshake|connection|503|502/i.test(String(error.stderr ?? ''))) throw error
+      console.error(`  retrying after transport error (attempt ${attempt + 1})`)
+      execFileSync('node', ['-e', 'setTimeout(()=>{},2000)'])
+    }
+  }
+  throw last
 }
 
 /** Every commit to publish, oldest first. */
@@ -53,19 +66,37 @@ function commits() {
   })
 }
 
-/** Create one blob for a file, reading content from a tree object. */
+/**
+ * Create one blob for a file, reading content from a tree object.
+ *
+ * When the remote already holds a blob with this exact sha, the content is
+ * identical and the upload is skipped: GitHub hashes blob content the same way
+ * git does, so a matching sha is proof the bytes already exist server-side.
+ * That is what keeps a follow-up commit cheap instead of re-sending the tree.
+ */
 function createBlob(blobSha, path) {
-  const content = gitBuffer('cat-file', 'blob', blobSha)  // ls-tree sha is portable
+  if (knownBlobs.has(blobSha)) return blobSha
+  const content = gitBuffer('cat-file', 'blob', blobSha)  // the object's stable content
   const isBinary = content.includes(0)
-  return api(`repos/${repoSlug}/git/blobs`, {
+  const made = api(`repos/${repoSlug}/git/blobs`, {
     method: 'POST',
     body: isBinary
       ? { content: content.toString('base64'), encoding: 'base64' }
       : { content: content.toString('utf8'), encoding: 'utf-8' },
   }).sha
+  knownBlobs.add(made)
+  knownBlobs.add(blobSha)
+  return made
 }
 
-/** Create a tree from the entries of one local tree object. */
+/**
+ * Create a tree from the entries of one local tree object.
+ *
+ * Recursion is what makes this correct for nested paths: a subtree is created
+ * from its own `ls-tree` output and then referenced as a `tree` entry by its
+ * parent. Deriving directories from path prefixes instead would drop every
+ * subdirectory, because a parent would never receive an entry for it.
+ */
 function createTree(treeSha) {
   const raw = git('ls-tree', '-z', treeSha)
   const entries = raw.split('\u0000').filter(Boolean).map(entry => {
@@ -84,6 +115,29 @@ function createTree(treeSha) {
     }
   }
   return api(`repos/${repoSlug}/git/trees`, { method: 'POST', body: { tree: out } }).sha
+}
+
+/**
+ * Blob shas the remote already stores, so their content need not be re-sent.
+ *
+ * Seeded from the current remote tip's tree; empty for a first push, which
+ * makes that case upload everything exactly as before.
+ */
+const knownBlobs = new Set()
+const existingTip = (() => {
+  try {
+    return api(`repos/${repoSlug}/git/ref/heads/${branch}`).object.sha
+  } catch {
+    return undefined
+  }
+})()
+if (existingTip !== undefined) {
+  const remoteCommit = api(`repos/${repoSlug}/git/commits/${existingTip}`)
+  const remoteTree = api(`repos/${repoSlug}/git/trees/${remoteCommit.tree.sha}?recursive=1`)
+  for (const entry of remoteTree.tree) {
+    if (entry.type === 'blob') knownBlobs.add(entry.sha)
+  }
+  console.log(`remote tip ${existingTip.slice(0, 8)} carries ${knownBlobs.size} blobs; unchanged ones will be reused`)
 }
 
 const remap = new Map()
