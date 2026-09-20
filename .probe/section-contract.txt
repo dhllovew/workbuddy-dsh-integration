@@ -1,0 +1,83 @@
+=== @deepseek-ai/dsh-client-ui-settings-plugins@0.1.5-rc.1
+dir: 1-dsh-workbuddy-connect\node_modules\.pnpm\@deepseek-ai+dsh-client-ui-_98e99932d29e01a56f710eabcbbfd834\node_modules\@deepseek-ai\dsh-client-ui-settings-plugins
+
+--- \lib\client.js
+1749: 					}
+1750: 					return tabs;
+1751: 				},
+1752: 				subscribe: (listener) => {
+1753: 					const offLedger = ctx.slots.subscribe("settings.plugins.tab", listener);
+1754: 					const offLocale = ctx.locale.subscribe(listener);
+1755: 					return () => {
+1756: 						offLedger();
+1757: 						offLocale();
+1758: 					};
+1759: 				}
+1760: 			} } });
+1761: 			ctx.slots.inject("settings.section", () => ctx.slots.register({
+1762: 				name: "settings.section",
+1763: 				id: "plugins",
+1764: 				order: 15,
+1765: 				label: () => t("nav"),
+1766: 				locale: NS,
+1767: 				inject: sectionInjected,
+1768: 				children: { "settings.plugins.tab": {
+1769: 					kind: "list",
+1770: 					scope: "root"
+1771: 				} }
+1772: 			}, PluginsSettingsSection));
+1773: 			ctx.slots.inject("settings.plugins.tab", () => ctx.slots.register({
+1774: 				name: "settings.plugins.tab",
+   ...
+1750: 					return tabs;
+1751: 				},
+1752: 				subscribe: (listener) => {
+1753: 					const offLedger = ctx.slots.subscribe("settings.plugins.tab", listener);
+1754: 					const offLocale = ctx.locale.subscribe(listener);
+1755: 					return () => {
+1756: 						offLedger();
+1757: 						offLocale();
+1758: 					};
+1759: 				}
+1760: 			} } });
+1761: 			ctx.slots.inject("settings.section", () => ctx.slots.register({
+1762: 				name: "settings.section",
+1763: 				id: "plugins",
+1764: 				order: 15,
+1765: 				label: () => t("nav"),
+1766: 				locale: NS,
+1767: 				inject: sectionInjected,
+1768: 				children: { "settings.plugins.tab": {
+1769: 					kind: "list",
+1770: 					scope: "root"
+1771: 				} }
+1772: 			}, PluginsSettingsSection));
+1773: 			ctx.slots.inject("settings.plugins.tab", () => ctx.slots.register({
+1774: 				name: "settings.plugins.tab",
+1775: 				id: "configurable",
+   ...
+
+--- \lib\types\client\PluginsSettingsSection.d.ts
+6:     id: string;
+7:     order: number;
+8:     label: string;
+9: }
+10: /** Registration-side business face for the section. */
+11: export interface PluginsSettingsSectionInjected {
+12:     hooks: {
+13:         /** Ordered, locale-aware projection of the Plugins tab ledger. */
+14:         tabs: HostObservable<readonly PluginsSettingsTabEntry[]>;
+15:     };
+16: }
+17: /** Props the renderer binds for the section. */
+18: export type PluginsSettingsSectionProps = PropsRuntime<'settings.section'> & PropsLocale<'settings.plugins'> & PropsRenderSlots<'settings.plugins.tab'> & InjectFace<PluginsSettingsSectionInjected>;
+19: /** Render one Plugins page whose contents arrive from feature-owned tabs. */
+20: export declare function PluginsSettingsSection({ t, renderSlot, useTabs }: PluginsSettingsSectionProps): import("react").JSX.Element;
+21: declare module '@deepseek-ai/dsh-client-ui-slots' {
+22:     interface LocaleNamespaceMap {
+23:         /** Plugins section, configurable-tab, and card copy. */
+24:         'settings.plugins': PluginsSettingsLocaleKey;
+25:     }
+26: }
+27: //# sourceMappingURL=PluginsSettingsSection.d.ts.map
+   ...

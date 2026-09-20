@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkBuddy × DSH —— 功能预期 Demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #e3e6ea;
+    --border-strong: #cfd4da;
+    --text: #1c1f23;
+    --text-2: #5b636c;
+    --text-3: #8b939c;
+    --brand: #4d6bfe;
+    --brand-soft: #eef1ff;
+    --ok: #22a06b;
+    --ok-soft: #e8f6ef;
+    --warn: #b7791f;
+    --warn-soft: #fdf6e3;
+    --err: #d64545;
+    --err-soft: #fdecec;
+    --today: #22a06b;
+    --planned: #8b5cf6;
+    --radius: 10px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 22px 80px; }
+
+  /* ---------- page header ---------- */
+  .page-head { margin-bottom: 20px; }
+  .page-head h1 { margin: 0 0 6px; font-size: 23px; letter-spacing: -.2px; }
+  .page-head p { margin: 0; color: var(--text-2); font-size: 13.5px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.t { background: var(--today); }
+  .dot.p { background: var(--planned); }
+
+  /* ---------- the mocked DSH settings shell ---------- */
+  .shell {
+    display: grid; grid-template-columns: 232px 1fr;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 6px 26px rgba(20,25,35,.07);
+    min-height: 760px;
+  }
+  .nav { border-right: 1px solid var(--border); background: #fbfcfd; padding: 16px 12px; }
+  .nav-title { font-size: 12px; font-weight: 600; color: var(--text-3); padding: 0 10px 10px; letter-spacing: .3px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 8px; font-size: 13.5px;
+    color: var(--text-2); cursor: default; margin-bottom: 2px;
+  }
+  .nav-item .ico { width: 16px; text-align: center; opacity: .75; }
+  .nav-item:hover { background: #f0f2f5; }
+  .nav-item.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .nav-item.sub { padding-left: 30px; font-size: 13px; }
+  .nav-item.sub.active { background: var(--brand-soft); }
+  .nav-sep { height: 1px; background: var(--border); margin: 10px 8px; }
+  .nav-hint { margin-top: 14px; padding: 10px; border-radius: 8px; background: var(--warn-soft); border: 1px solid #f0e0b8; font-size: 11.5px; color: var(--warn); line-height: 1.5; }
+
+  .content { padding: 22px 26px 30px; min-width: 0; }
+  .content-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .content-head h2 { margin: 0 0 4px; font-size: 18px; }
+  .content-head p { margin: 0; color: var(--text-2); font-size: 13px; }
+  .btn {
+    border: 1px solid var(--border-strong); background: #fff; color: var(--text);
+    border-radius: 18px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: #f7f8fa; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- tabs inside the section ---------- */
+  .tabs { display: flex; gap: 22px; margin: 16px 0 18px; border-bottom: 1px solid var(--border); }
+  .tab {
+    padding: 7px 0 10px; font-size: 13.5px; color: var(--text-2);
+    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; border-top: 0; border-left: 0; border-right: 0; font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- generic bits ---------- */
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; background: #fff; }
+  .card h3 { margin: 0 0 12px; font-size: 14.5px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { color: var(--text-2); font-size: 13px; }
+  .row .v { font-size: 13.5px; font-weight: 500; text-align: right; }
+  .muted { color: var(--text-3); font-weight: 400; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 8px; border-radius: 999px; font-size: 11px; line-height: 18px; font-weight: 500;
+  }
+  .b-ok { background: var(--ok-soft); color: var(--ok); }
+  .b-warn { background: var(--warn-soft); color: var(--warn); }
+  .b-err { background: var(--err-soft); color: var(--err); }
+  .b-brand { background: var(--brand-soft); color: var(--brand); }
+  .b-gray { background: #f0f2f5; color: var(--text-2); }
+  .b-free { background: var(--ok-soft); color: var(--ok); }
+
+  .stage { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; padding: 1px 7px; border-radius: 5px; vertical-align: 2px; margin-left: 8px; }
+  .stage.t { background: var(--ok-soft); color: var(--today); }
+  .stage.p { background: #f3eefe; color: var(--planned); }
+
+  /* ---------- credits ---------- */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .big-num { font-size: 27px; font-weight: 700; letter-spacing: -.5px; }
+  .big-num small { font-size: 13px; font-weight: 500; color: var(--text-3); margin-left: 3px; }
+  .bar { height: 7px; border-radius: 999px; background: #eef0f3; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+  .bar > i.ok { background: var(--ok); }
+  .bar > i.warn { background: #e0a83a; }
+  .pkg { margin-bottom: 13px; }
+  .pkg:last-child { margin-bottom: 0; }
+  .pkg-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px; }
+  .countdown { font-family: var(--mono); font-size: 12.5px; color: var(--warn); }
+  .stale { font-size: 11.5px; color: var(--text-3); }
+  .stale.live { color: var(--ok); }
+
+  /* ---------- model table ---------- */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .search { flex: 1; min-width: 170px; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; font-size: 13px; }
+  .chip {
+    border: 1px solid var(--border-strong); background: #fff; color: var(--text-2);
+    border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .chip.active { background: var(--text); border-color: var(--text); color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-size: 11.5px; font-weight: 600; color: var(--text-3);
+    padding: 8px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  th:hover { color: var(--text); }
+  th.num, td.num { text-align: right; }
+  th .arrow { opacity: .45; font-size: 10px; }
+  td { padding: 9px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+  tr:hover td { background: #fafbfc; }
+  .mname { font-weight: 500; }
+  .mid { font-family: var(--mono); font-size: 11px; color: var(--text-3); display: block; }
+  .caps { display: flex; gap: 4px; flex-wrap: wrap; }
+  .rate { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .rate.free { color: var(--ok); }
+
+  /* ---------- model selection ---------- */
+  .pick-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 11px 14px; border-radius: var(--radius); margin-bottom: 12px;
+    background: linear-gradient(90deg, var(--brand-soft), #f8f9ff);
+    border: 1px solid #d9e0ff;
+  }
+  .pick-bar .big { font-size: 15px; font-weight: 700; color: var(--brand); }
+  .pick-bar .sub { font-size: 12px; color: var(--text-2); }
+  .pick-bar .grow { flex: 1; }
+  .switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); cursor: pointer; user-select: none; }
+  .switch input { accent-color: var(--brand); width: 15px; height: 15px; cursor: pointer; }
+  td.chk, th.chk { width: 38px; text-align: center; padding-left: 12px; padding-right: 0; }
+  td.chk input { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
+  tr.on td { background: #f5f7ff; }
+  tr.on:hover td { background: #eef1ff; }
+  tr.dropped td { opacity: .62; }
+  .warnline { color: var(--err); font-size: 11px; display: block; margin-top: 2px; }
+  .legend-mini { font-size: 11.5px; color: var(--text-3); margin-top: 10px; line-height: 1.6; }
+  .legend-mini b { color: var(--text-2); }
+
+  /* ---------- usage ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .stat { border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; }
+  .stat .lbl { font-size: 11.5px; color: var(--text-3); margin-bottom: 5px; }
+  .stat .val { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+  .stat .val small { font-size: 12px; font-weight: 500; color: var(--text-3); }
+  .spark { display: flex; align-items: flex-end; gap: 5px; height: 84px; padding-top: 6px; }
+  .spark > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; height: 100%; }
+  .spark .b { width: 100%; background: linear-gradient(180deg, #7d93ff, #4d6bfe); border-radius: 4px 4px 0 0; min-height: 3px; }
+  .spark .d { font-size: 10px; color: var(--text-3); }
+  .spark .n { font-size: 9.5px; color: var(--text-3); }
+
+  /* ---------- playground ---------- */
+  .pg { display: grid; grid-template-columns: 190px 1fr; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .pg-side { border-right: 1px solid var(--border); background: #fbfcfd; padding: 12px; }
+  .pg-side h4 { margin: 0 0 9px; font-size: 11.5px; color: var(--text-3); letter-spacing: .3px; }
+  .radio { display: flex; align-items: center; gap: 7px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; color: var(--text-2); cursor: default; }
+  .radio.on { background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+  .pg-main { display: flex; flex-direction: column; min-height: 300px; }
+  .pg-log { flex: 1; padding: 14px; font-size: 13px; overflow-y: auto; }
+  .msg { margin-bottom: 12px; display: flex; gap: 9px; }
+  .msg .who { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .msg.u .who { background: #eef0f3; color: var(--text-2); }
+  .msg.a .who { background: var(--brand); color: #fff; }
+  .msg .body { min-width: 0; }
+  .msg .body .txt { white-space: pre-wrap; }
+  .think { border-left: 2px solid #e0e4ea; padding: 4px 0 4px 10px; color: var(--text-3); font-size: 12.5px; margin-bottom: 5px; }
+  .cost { display: inline-flex; gap: 8px; font-size: 11px; color: var(--text-3); margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--border); }
+  .pg-input { border-top: 1px solid var(--border); padding: 11px; display: flex; gap: 8px; }
+  .pg-input textarea { flex: 1; resize: none; border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 11px; font: inherit; font-size: 13px; height: 42px; }
+
+  /* ---------- roadmap ---------- */
+  .road { margin-top: 34px; }
+  .road h2 { font-size: 17px; margin: 0 0 4px; }
+  .road > p { margin: 0 0 16px; color: var(--text-2); font-size: 13px; }
+  .steps { display: grid; gap: 10px; }
+  .step { display: grid; grid-template-columns: 62px 1fr; gap: 14px; border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 16px; background: #fff; }
+  .step .ph { font-weight: 700; font-size: 13px; color: var(--brand); }
+  .step .ph small { display: block; font-weight: 500; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+  .step h4 { margin: 0 0 4px; font-size: 13.5px; }
+  .step p { margin: 0; font-size: 12.5px; color: var(--text-2); }
+  .step.done { background: linear-gradient(90deg, var(--ok-soft), #fff 55%); border-color: #cfe9dc; }
+  .step.done .ph { color: var(--ok); }
+  .step .tags { margin-top: 7px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .note { margin-top: 16px; padding: 12px 15px; border-radius: var(--radius); background: var(--warn-soft); border: 1px solid #f0e0b8; font-size: 12.5px; color: #7a5a12; }
+  .note b { color: #5f4708; }
+  footer { margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }
+  code { font-family: var(--mono); font-size: 12px; background: #f0f2f5; padding: 1px 5px; border-radius: 4px; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .nav { border-right: 0; border-bottom: 1px solid var(--border); }
+    .grid2, .stats { grid-template-columns: 1fr 1fr; }
+    .pg { grid-template-columns: 1fr; }
+    .pg-side { border-right: 0; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-head">
+    <h1>WorkBuddy × DSH —— 板块功能预期 Demo</h1>
+    <p>用真实上游数据渲染的「目标形态」预览：DSH 设置里一个独立 WorkBuddy 板块，内部四页。左侧为 DSH 设置导航的模拟。此文件是<strong>静态预览</strong>，不是运行中的插件。</p>
+    <div class="legend">
+      <span><i class="dot t"></i> 现已实现（当前插件已具备的数据能力）</span>
+      <span><i class="dot p"></i> 规划中（P1–P6 待开发）</span>
+    </div>
+  </div>
+
+  <div class="shell">
+    <!-- ============ nav ============ -->
+    <div class="nav">
+      <div class="nav-title">设置</div>
+      <div class="nav-item"><span class="ico">⚙</span> 通用设置</div>
+      <div class="nav-item"><span class="ico">◧</span> 模型</div>
+      <div class="nav-item"><span class="ico">▤</span> 插件</div>
+      <div class="nav-item"><span class="ico">◈</span> Agent 预设</div>
+      <div class="nav-item active"><span class="ico">◉</span> WorkBuddy <span class="stage p">P1</span></div>
+      <div class="nav-sep"></div>
+      <div class="nav-item sub active">账号与积分</div>
+      <div class="nav-item sub">模型中心</div>
+      <div class="nav-item sub">用量</div>
+      <div class="nav-item sub">测试台</div>
+      <div class="nav-hint">这是 P1 要新增的第 5 个导航项。当前插件只有「插件」区里的两张卡片。</div>
+    </div>
+
+    <!-- ============ content ============ -->
+    <div class="content">
+      <div class="content-head">
+        <div>
+          <h2>WorkBuddy</h2>
+          <p>账号、积分、模型目录、用量与测试台 —— 全部数据来自插件自己的同源路由。</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="alert('Demo：切换 CN / 国际版（对应两个 provider：workbuddy / workbuddy-ai）')">切换版本：CN ▾</button>
+          <button class="btn primary" onclick="alert('Demo：重新拉取目录与积分')">刷新</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-p="p-account">账号与积分</button>
+        <button class="tab" data-p="p-models">模型中心</button>
+        <button class="tab" data-p="p-usage">用量</button>
+        <button class="tab" data-p="p-play">测试台</button>
+      </div>
+
+      <!-- ---------- 1. account & credits ---------- -->
+      <div class="panel active" id="p-account">
+        <div class="grid2" style="margin-bottom:14px">
+          <div class="card" style="margin:0">
+            <h3>账号状态 <span class="stage t">已实现</span></h3>
+            <div class="row"><span class="k">昵称</span><span class="v">— <span class="muted">（未登录时显示签入提示）</span></span></div>
+            <div class="row"><span class="k">账号 ID</span><span class="v mono">f948f56e-…-b7436f881102:</span></div>
+            <div class="row"><span class="k">凭据来源</span><span class="v"><span class="badge b-brand">桌面 App</span> <span class="mono muted">workbuddy:cli</span></span></div>
+            <div class="row"><span class="k">登录有效期</span><span class="v">剩余 <b>6 天 4 小时</b><div class="stale">2026-09-27 04:12 到期</div></span></div>
+            <div class="row"><span class="k">最后续期</span><span class="v">09-20 23:56 <span class="stage p">P4</span></span></div>
+          </div>
+
+          <div class="card" style="margin:0">
+            <h3>积分总览 <span class="stage t">已实现</span></h3>
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <div class="big-num">1,284<small>积分</small></div>
+              <span class="stale live">● 实时</span>
+            </div>
+            <div class="bar"><i style="width:64%"></i></div>
+            <div class="stale" style="margin-top:6px">套餐总量 2,000 · 已用 716</div>
+            <div class="row" style="margin-top:10px"><span class="k">周期重置</span><span class="v mono">2026-10-01 00:00</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>套餐与到期倒计时 <span class="stage p">P4</span></h3>
+          <div class="pkg">
+            <div class="pkg-head"><span>体验套餐</span><span>1,000 / 1,000</span></div>
+            <div class="bar"><i class="ok" style="width:100%"></i></div>
+            <div class="stale" style="margin-top:5px">到期 <span class="countdown">剩 12 天 03:24:11</span> · 2026-10-03 04:00</div>
+          </div>
+          <div class="pkg">
+            <div class="pkg-head"><span>月度套餐</span><span>284 / 1,000</span></div>
+            <div class="bar warn" style="--w:28%"><i class="warn" style="width:28%"></i></div>
+            <div class="stale" style="margin-top:5px">到期 <span class="countdown">剩 2 天 19:07:42</span> · 2026-09-23 19:30</div>
+          </div>
+          <div class="note" style="margin-top:12px">
+            <b>「实时 / 缓存」标注与倒计时来自 [4] 的能力</b>：积分是直连腾讯的实时值；倒计时按套餐分批计算，过期后不再重复显示为「可用」。
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>账号变体说明</h3>
+          <div class="row"><span class="k">CN</span><span class="v"><span class="badge b-ok">workbuddy</span> 企业端点为主，单路积分 <span class="mono">/v2/billing/meter/get-user-resource</span></span></div>
+          <div class="row"><span class="k">国际版</span><span class="v"><span class="badge b-brand">workbuddy-ai</span> <span class="mono">/v3/config</span> 为主，积分优先无 <span class="mono">/v2</span> 路径</span></div>
+          <div class="stale" style="margin-top:10px">这就是「插件」区里出现<strong>两张卡片</strong>的原因：一个命名空间 = 一张卡，两个变体必须分开显示账号与余额，否则会串号。</div>
+        </div>
+      </div>
+
+      <!-- ---------- 2. model center ---------- -->
+      <div class="panel" id="p-models">
+        <div class="card" style="padding-bottom:6px">
+          <h3 style="margin-bottom:8px">模型中心 <span class="stage t">数据已实现</span> <span class="stage p">表格 P2</span> <span class="stage p">选择模型 P1.5</span></h3>
+          <div class="toolbar">
+            <input class="search" id="mq" placeholder="搜索模型名或 ID…" oninput="renderModels()">
+            <button class="chip active" data-f="all" onclick="setFilter(this)">全部 39</button>
+            <button class="chip" data-f="picked" onclick="setFilter(this)">已选择 <span id="chipPicked">0</span></button>
+            <button class="chip" data-f="free" onclick="setFilter(this)">免费/促销 3</button>
+            <button class="chip" data-f="vision" onclick="setFilter(this)">多模态 30</button>
+            <button class="chip" data-f="reason" onclick="setFilter(this)">推理 27</button>
+          </div>
+        </div>
+
+        <!-- ===== selection summary: the P1.5 feature ===== -->
+        <div class="pick-bar">
+          <div>
+            <div><span class="big" id="pickedCount">0</span> <span class="big">/ 39</span> <span class="sub">个模型已选中</span></div>
+            <div class="sub">只有选中的模型会出现在 DSH 的模型选择器里</div>
+          </div>
+          <div class="grow"></div>
+          <label class="switch" title="演示：切换后表格显示 DSH 选择器里实际会出现的内容">
+            <input type="checkbox" id="previewMode" onchange="renderModels()"> 预览 DSH 选择器
+          </label>
+          <button class="btn" onclick="pickRecommended()">选择推荐</button>
+          <button class="btn" onclick="clearPicked()">全不选</button>
+          <button class="btn" onclick="simulateDrop()" title="演示：已选模型在上游目录里消失时会怎样">模拟模型下线</button>
+        </div>
+
+        <div class="card" style="padding:4px 6px">
+          <table>
+            <thead>
+              <tr>
+                <th class="chk"><input type="checkbox" id="chkAll" onchange="toggleAll(this.checked)" title="全选/全不选（当前筛选结果）"></th>
+                <th onclick="sortBy('name')">模型 <span class="arrow">↕</span></th>
+                <th class="num" onclick="sortBy('credits')">倍率 <span class="arrow">↕</span></th>
+                <th class="num" onclick="sortBy('ctx')">上下文 <span class="arrow">↕</span></th>
+                <th class="num">最大输出</th>
+                <th>档位</th>
+                <th>能力</th>
+              </tr>
+            </thead>
+            <tbody id="mtbody"></tbody>
+          </table>
+        </div>
+        <div class="stale" style="padding:0 4px">显示 <b id="mcount">39</b> 个模型 · 数据来自 <span class="mono">.workbuddy-catalog.json</span>（真实快照，09-20 23:56 抓取）</div>
+        <div class="legend-mini">
+          <b>默认语义</b>：从未配置过（<code>selectedModels</code> 缺省）＝ 全部显示，保证升级后选择器不会突然变空。<br>
+          <b>空数组 ≠ 全部</b>：显式清空表示「一个都不显示」，与未配置区分开，避免歧义。<br>
+          <b>可解析性保留</b>：过滤只作用于列表可见性，<code>resolveModel()</code> 仍能解析未选中的模型，已保存的会话与默认模型不会因此失效。
+        </div>
+      </div>
+
+      <!-- ---------- 3. usage ---------- -->
+      <div class="panel" id="p-usage">
+        <div class="stats">
+          <div class="stat"><div class="lbl">调用总数</div><div class="val">1,482</div></div>
+          <div class="stat"><div class="lbl">总 token</div><div class="val">8.6<small>M</small></div></div>
+          <div class="stat"><div class="lbl">平均首字延迟</div><div class="val">0.84<small>s</small></div></div>
+          <div class="stat"><div class="lbl">累计扣费</div><div class="val">716<small>积分</small></div></div>
+        </div>
+
+        <div class="card">
+          <h3>近 7 天调用量 <span class="stage p">P3</span></h3>
+          <div class="spark" id="spark"></div>
+        </div>
+
+        <div class="card" style="padding:4px 6px">
+          <h3 style="padding:14px 12px 6px;margin:0">按模型统计 <span class="stage p">P3</span></h3>
+          <table>
+            <thead><tr><th>模型</th><th class="num">调用</th><th class="num">输入 token</th><th class="num">输出 token</th><th class="num">首字延迟</th><th class="num">扣费</th></tr></thead>
+            <tbody>
+              <tr><td class="mname">Deepseek-V4.1-Flash<span class="mid">deepseek-v4.1-flash</span></td><td class="num">612</td><td class="num">3,204,880</td><td class="num">418,220</td><td class="num">0.62 s</td><td class="num rate">218</td></tr>
+              <tr><td class="mname">GLM-5.3<span class="mid">glm-5.3</span></td><td class="num">327</td><td class="num">1,882,410</td><td class="num">276,004</td><td class="num">0.91 s</td><td class="num rate">342</td></tr>
+              <tr><td class="mname">Kimi-K3<span class="mid">kimi-k3-1</span></td><td class="num">184</td><td class="num">1,120,660</td><td class="num">198,540</td><td class="num">1.24 s</td><td class="num rate">128</td></tr>
+              <tr><td class="mname">Deepseek-V4-Pro<span class="mid">deepseek-v4-pro</span></td><td class="num">96</td><td class="num">640,200</td><td class="num">121,880</td><td class="num">1.07 s</td><td class="num rate">28</td></tr>
+              <tr><td class="mname">Hy3<span class="mid">hy3</span></td><td class="num">263</td><td class="num">510,300</td><td class="num">88,120</td><td class="num">0.71 s</td><td class="num rate free">0 免费</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <b>埋点位置</b>：shim 是插件唯一出站口，在此记录 per-request 指标 → <code>$DSH_HOME/.workbuddy-usage.jsonl</code>（原子写 + 轮转）。扣费取自 SSE 的 <code>usage.credit</code>。数据为示意值。
+        </div>
+      </div>
+
+      <!-- ---------- 4. playground ---------- -->
+      <div class="panel" id="p-play">
+        <div class="pg">
+          <div class="pg-side">
+            <h4>模型 <span class="stage p">P5</span></h4>
+            <div class="radio on">◉ Deepseek-V4.1-Flash</div>
+            <div class="radio">○ GLM-5.3</div>
+            <div class="radio">○ Kimi-K3</div>
+            <h4 style="margin-top:16px">思考强度</h4>
+            <div class="radio">○ low</div>
+            <div class="radio on">◉ high</div>
+            <div class="radio">○ max</div>
+            <h4 style="margin-top:16px">本次消耗</h4>
+            <div class="radio on" style="cursor:default">≈ 0.86 积分</div>
+          </div>
+          <div class="pg-main">
+            <div class="pg-log">
+              <div class="msg u"><div class="who">你</div><div class="body"><div class="txt">用一句话解释什么是 loopback shim。</div></div></div>
+              <div class="msg a"><div class="who">AI</div><div class="body">
+                <div class="think">思考中（high）… 需要说明它只绑 127.0.0.1、有每进程随机密钥…</div>
+                <div class="txt">它是一个只监听本机回环地址的迷你 OpenAI 兼容端点，DSH 通过它把请求转给腾讯上游；因为带每进程随机密钥，本机其他进程也无法白嫖。</div>
+                <div class="cost"><span>首字 0.58s</span><span>总耗时 2.31s</span><span>↑ 42 tok</span><span>↓ 116 tok</span><span>扣费 0.86</span></div>
+              </div></div>
+            </div>
+            <div class="pg-input">
+              <textarea placeholder="输入内容测试（Demo）…"></textarea>
+              <button class="btn primary" onclick="alert('Demo：此处走受控 host 侧试调路由，复用 probe 的 loopback + 每进程随机密钥模式')">发送</button>
+            </div>
+          </div>
+        </div>
+        <div class="note">
+          <b>安全模式</b>：复用现有 probe 的「同源 + loopback + 每进程随机密钥」三重守卫，密钥随状态文档下发、永不落盘。测试台是唯一会额外花积分的功能，需显式点击确认。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ roadmap ============ -->
+  <div class="road">
+    <h2>实现路线</h2>
+    <p>上面 Demo 里标的 <span class="stage t">已实现</span> / <span class="stage p">规划</span> 对应下面各阶段。</p>
+    <div class="steps">
+      <div class="step done">
+        <div class="ph">P0<small>已完成</small></div>
+        <div>
+          <h4>协议层对齐</h4>
+          <p>统一三段式 UA、<code>X-Auth-Refresh-Source: plugin</code>、归因头组、国际积分路径与 CN 双路目录、<code>parseV3Catalog</code> 非对话模型过滤。仅改 <code>src/upstream.ts</code>。</p>
+          <div class="tags"><span class="badge b-ok">已验证 341/2 基线</span><span class="badge b-gray">4 项国际/企业路径待活测</span></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P1<small>下一步</small></div>
+        <div>
+          <h4>独立设置板块骨架</h4>
+          <p>新增 <code>WorkBuddySettingsSection.tsx</code>，注册 <code>settings.section</code>（<code>id:'workbuddy'</code>、<code>order:25</code>）；四页标签状态自持；现有两张卡片保留为 Plugins 区概览入口。</p>
+          <div class="tags"><span class="badge b-ok">无需加依赖</span><span class="badge b-warn">需同步改 client-fallback.spec.ts</span></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P2</div>
+        <div>
+          <h4>展示补齐（建议前置）</h4>
+          <p>积分实时/缓存标注 + 套餐到期倒计时；模型中心可排序表格（倍率/档位/上下文/能力）+ 别名映射；i18n 扩语言。否则 P1 的板块是空壳。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P3</div>
+        <div>
+          <h4>远程池模式</h4>
+          <p>把上游 base 参数化，让 DSH 直连 workbuddy2api 网关。红线：本地 auth token 与 remote key 不得同现于一个请求。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P4</div>
+        <div>
+          <h4>用量埋点</h4>
+          <p>shim 记录 per-request 指标到 jsonl（注意增长与轮转），用量页按模型与按日聚合。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P5</div>
+        <div>
+          <h4>同源测试台</h4>
+          <p>复用 probe 的 loopback + 每进程随机密钥模式，加受控试调路由与组件。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="ph">P6</div>
+        <div>
+          <h4>可选多账号（高风险）</h4>
+          <p>移植账号池选号/冷却策略，并一并补 <code>X-Machine-ID</code>/<code>X-Session-ID</code>。禁止按时间戳挑 token；<code>X-User-Id</code> 必须与实际账号严格绑定；需默认关闭的显式授权开关。</p>
+          <div class="tags"><span class="badge b-err">误用会串号</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Demo 文件：<code>02-WorkBuddy板块功能预期Demo.html</code> · 模型数据取自本机真实快照 <code>C:\Users\haishi\.dsh\.workbuddy-catalog.json</code>（39 个模型，2026-09-20 23:56 抓取）· 用量与积分数值为演示用示意值。
+  </footer>
+</div>
+
+<script>
+/* ---------- real catalog snapshot (39 models, trimmed to the fields shown) ---------- */
+const MODELS = [
+  {id:'auto',name:'Auto',ctx:256000,out:32000,vision:true,reason:true,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'hy4-preview',name:'Hy4 preview',ctx:1000000,out:64000,vision:true,reason:true,efforts:'high',default:'high',credits:0.29,free:false,badges:'夜间免费'},
+  {id:'hy3',name:'Hy3',ctx:192000,out:64000,vision:true,reason:true,efforts:'',default:'medium',credits:0,free:true,badges:'限时免费'},
+  {id:'hy3-x',name:'Hy3',ctx:192000,out:64000,vision:true,reason:true,efforts:'low,high',default:'medium',credits:0.05,free:false,badges:''},
+  {id:'deepseek-v4.1-flash',name:'Deepseek-V4.1-Flash',ctx:1000000,out:128000,vision:true,reason:true,efforts:'',default:'high',credits:0.03,free:false,badges:'独家优惠'},
+  {id:'glm-5.3',name:'GLM-5.3',ctx:1000000,out:64000,vision:true,reason:true,efforts:'low,high,max',default:'high',credits:0.79,free:false,badges:''},
+  {id:'glm-5.3-flash',name:'GLM-5.3-Flash',ctx:1000000,out:32000,vision:true,reason:true,efforts:'low,high,max',default:'high',credits:0.06,free:false,badges:''},
+  {id:'glm-5.2',name:'GLM-5.2',ctx:1000000,out:64000,vision:true,reason:true,efforts:'',default:'medium',credits:0.79,free:false,badges:'夜间折扣'},
+  {id:'glm-5.1',name:'GLM-5.1',ctx:200000,out:48000,vision:false,reason:true,efforts:'',default:'medium',credits:0.79,free:false,badges:''},
+  {id:'glm-5v-turbo',name:'GLM-5v-Turbo',ctx:200000,out:64000,vision:true,reason:true,efforts:'',default:'medium',credits:0.71,free:false,badges:''},
+  {id:'kimi-k3-1',name:'Kimi-K3',ctx:1000000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:1.62,free:false,badges:''},
+  {id:'kimi-k2.8-preview',name:'Kimi-K2.8-Preview',ctx:1000000,out:64000,vision:true,reason:true,efforts:'low,high,max',default:'high',credits:0.77,free:false,badges:''},
+  {id:'kimi-k2.7',name:'Kimi-K2.7-Code',ctx:256000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:0.57,free:false,badges:''},
+  {id:'kimi-k2.6',name:'Kimi-K2.6',ctx:256000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:0.52,free:false,badges:''},
+  {id:'minimax-m3',name:'MiniMax-M3',ctx:512000,out:64000,vision:true,reason:true,efforts:'',default:'medium',credits:0.25,free:false,badges:''},
+  {id:'deepseek-v4-pro',name:'Deepseek-V4-Pro',ctx:1000000,out:128000,vision:true,reason:true,efforts:'',default:'high',credits:0.51,free:false,badges:''},
+  {id:'minimax-m2.5',name:'MiniMax-M2.5',ctx:200000,out:48000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'glm-5.0-turbo',name:'GLM-5.0-Turbo',ctx:200000,out:48000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'glm-5.0',name:'GLM-5.0',ctx:200000,out:48000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'glm-4.7',name:'GLM-4.7',ctx:200000,out:48000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'glm-4.6v',name:'GLM-4.6V',ctx:128000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'kimi-k2.5',name:'Kimi-K2.5',ctx:256000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'kimi-k2-thinking',name:'Kimi-K2-Thinking',ctx:256000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'minimax-m2.7',name:'MiniMax-M2.7',ctx:200000,out:48000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'glm-4.6',name:'GLM-4.6',ctx:168000,out:32000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-v4-flash',name:'Deepseek-V4-Flash',ctx:1000000,out:50000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-2-volc',name:'DeepSeek-V3.2',ctx:96000,out:32000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-1-volc',name:'DeepSeek-V3-1-Terminus',ctx:96000,out:32000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-1-lkeap',name:'DeepSeek-V3-1',ctx:96000,out:32000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-1',name:'DeepSeek-V3.1',ctx:96000,out:32000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-0324-lkeap',name:'DeepSeek-V3-0324',ctx:112000,out:16000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-r1-0528-lkeap',name:'DeepSeek-R1-0528',ctx:96000,out:16000,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'kimi-k2-instruct-taiji',name:'Kimi-K2',ctx:31000,out:8192,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'default-1.1',name:'Claude-3.7-Sonnet',ctx:200000,out:8192,vision:true,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-r1-0528',name:'deepseek-r1',ctx:96000,out:8192,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'deepseek-v3-0324',name:'deepseek-v3',ctx:96000,out:8192,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'default-1.2',name:'Claude-4.0-Sonnet',ctx:200000,out:24000,vision:true,reason:false,efforts:'',default:'',credits:null,free:false,badges:''},
+  {id:'hunyuan-2.0-instruct',name:'Hunyuan-2.0-Instruct',ctx:128000,out:16000,vision:true,reason:true,efforts:'',default:'medium',credits:null,free:false,badges:''},
+  {id:'hunyuan-chat',name:'Hunyuan-Turbos',ctx:128000,out:8192,vision:false,reason:false,efforts:'',default:'',credits:null,free:false,badges:''}
+];
+
+let filter='all', sortKey='credits', sortDir=1;
+
+/* ------------------------------------------------------------------
+   P1.5 — model selection.
+
+   `picked === null` mirrors the unconfigured state: every model shows.
+   An explicit empty Set means "show nothing", which is deliberately
+   different from never having configured a selection.
+   ------------------------------------------------------------------ */
+let picked = null;                       // null = 未配置（全部）; Set = 显式选择
+const DEFAULT_PICKS = ['deepseek-v4.1-flash','glm-5.3','kimi-k3-1','deepseek-v4-pro'];
+
+function isPicked(id){ return picked === null || picked.has(id); }
+function pickCount(){ return picked === null ? MODELS.length : picked.size; }
+
+function togglePick(id, on){
+  if (picked === null) picked = new Set(MODELS.map(m=>m.id));   // 首次操作时实体化
+  if (on) picked.add(id); else picked.delete(id);
+  syncPicks();
+}
+function toggleAll(on){
+  const ids = MODELS.filter(m => {
+    const q=(document.getElementById('mq').value||'').toLowerCase().trim();
+    if(q && !(m.name.toLowerCase().includes(q)||m.id.toLowerCase().includes(q))) return false;
+    if(filter==='picked') return true;
+    if(filter==='free') return m.free||m.credits===0||!!m.badges;
+    if(filter==='vision') return m.vision;
+    if(filter==='reason') return m.reason;
+    return true;
+  }).map(m=>m.id);
+  if (picked === null) picked = new Set(MODELS.map(m=>m.id));
+  ids.forEach(id => on ? picked.add(id) : picked.delete(id));
+  syncPicks();
+}
+function pickRecommended(){ picked = new Set(DEFAULT_PICKS); syncPicks(); }
+function clearPicked(){ picked = new Set(); syncPicks(); }
+
+/* 演示「已选模型从上游消失」这一边界：配置保留并告警，而不是静默丢弃。
+   若当前没选中任何会下线的模型，先自动选一个，让效果可见。 */
+function simulateDrop(){
+  const victim = 'hy4-preview';                       // 一个真实存在但可下线的新模型
+  if (picked === null || picked.size === 0 || !picked.has(victim)) {
+    if (picked === null) picked = new Set(MODELS.map(m=>m.id));
+    picked.add(victim);
+  }
+  window.__droppedIds = [victim];
+  // 从「上游目录」中移除该模型，但保留在用户配置里
+  const i = MODELS.findIndex(m=>m.id===victim);
+  if (i >= 0) { MODELS.splice(i,1); }
+  syncPicks();
+  alert('演示：hy4-preview 已从上游目录消失。\n\n注意它的选择记录被保留了，并在表格里显式标注「该模型已从上游目录消失 · 配置已保留」。\n\n若此时刷新页面（重新同步目录），因为该模型已不在 MODELS 里，它不会再被渲染——真实实现里应该在「已选但不可用」清单中单独列出，而不是让用户以为自己没选过。');
+}
+
+function syncPicks(){
+  document.getElementById('pickedCount').textContent = pickCount();
+  document.getElementById('chipPicked').textContent = pickCount();
+  renderModels();
+}
+
+function setFilter(el){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  filter=el.dataset.f;
+  renderModels();
+}
+function sortBy(k){
+  if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir=1; }
+  renderModels();
+}
+const fmtCtx = n => n>=1000000 ? (n/1000000)+'M' : (n/1000)+'K';
+const fmtRate = m => {
+  if(m.free || m.credits===0) return '<span class="badge b-free">免费</span>';
+  if(m.credits===null) return '<span class="muted">—</span>';
+  return '<span class="rate">x'+m.credits.toFixed(2)+'</span>';
+};
+
+function renderModels(){
+  const q=(document.getElementById('mq').value||'').toLowerCase().trim();
+  const preview = document.getElementById('previewMode').checked;   // 模拟 DSH 选择器实际内容
+  let rows=MODELS.filter(m=>{
+    if(preview && !isPicked(m.id)) return false;
+    if(q && !(m.name.toLowerCase().includes(q)||m.id.toLowerCase().includes(q))) return false;
+    if(filter==='picked') return isPicked(m.id);
+    if(filter==='free') return m.free||m.credits===0||!!m.badges;
+    if(filter==='vision') return m.vision;
+    if(filter==='reason') return m.reason;
+    return true;
+  });
+  rows.sort((a,b)=>{
+    let x,y;
+    if(sortKey==='name'){ x=a.name.toLowerCase(); y=b.name.toLowerCase(); return x<y?-sortDir:x>y?sortDir:0; }
+    if(sortKey==='credits'){ x=a.free?0:(a.credits===null?9999:a.credits); y=b.free?0:(b.credits===null?9999:b.credits); }
+    else { x=a.ctx; y=b.ctx; }
+    return (x-y)*sortDir;
+  });
+  document.getElementById('mtbody').innerHTML = rows.map(m=>{
+    const on = isPicked(m.id);
+    /* 已选中、但当前目录里已不存在的模型 → 保留配置并显式告警，而不是静默丢弃 */
+    const dropped = window.__droppedIds && window.__droppedIds.includes(m.id);
+    return `
+    <tr class="${on?'on':''}${dropped?' dropped':''}">
+      <td class="chk"><input type="checkbox" ${on?'checked':''} onchange="togglePick('${m.id}', this.checked)"></td>
+      <td><span class="mname">${m.name}</span><span class="mid">${m.id}</span>${dropped?'<span class="warnline">该模型已从上游目录消失 · 配置已保留</span>':''}</td>
+      <td class="num">${fmtRate(m)}${m.badges?` <span class="badge b-warn">${m.badges}</span>`:''}</td>
+      <td class="num">${fmtCtx(m.ctx)}</td>
+      <td class="num">${m.out>=1000?Math.round(m.out/1000)+'K':m.out}</td>
+      <td>${m.reason?(m.efforts?m.efforts.split(',').map(e=>`<span class="badge b-gray">${e}</span>`).join(' '):`<span class="badge b-brand">${m.default||'推理'}</span>`):'<span class="muted">—</span>'}</td>
+      <td><div class="caps">${m.vision?'<span class="badge b-brand">图像</span>':''}${m.reason?'<span class="badge b-gray">推理</span>':''}</div></td>
+    </tr>`}).join('');
+  document.getElementById('mcount').textContent=rows.length;
+  document.getElementById('pickedCount').textContent=pickCount();
+  // 全选框反映「当前筛选结果是否都已选中」，避免它停留在过期状态
+  const chkAll=document.getElementById('chkAll');
+  chkAll.checked = rows.length>0 && rows.every(m=>isPicked(m.id));
+  chkAll.indeterminate = !chkAll.checked && rows.some(m=>isPicked(m.id));
+}
+
+/* ---------- sparkline ---------- */
+(function(){
+  const data=[{d:'09-15',n:186},{d:'09-16',n:243},{d:'09-17',n:158},{d:'09-18',n:312},{d:'09-19',n:271},{d:'09-20',n:204},{d:'09-21',n:108}];
+  const max=Math.max(...data.map(x=>x.n));
+  document.getElementById('spark').innerHTML=data.map(x=>`
+    <div><span class="n">${x.n}</span><div class="b" style="height:${Math.round(x.n/max*64)}px"></div><span class="d">${x.d}</span></div>`).join('');
+})();
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.p).classList.add('active');
+    document.querySelectorAll('.nav-item.sub').forEach(n=>n.classList.remove('active'));
+    const idx=['p-account','p-models','p-usage','p-play'].indexOf(t.dataset.p);
+    const subs=document.querySelectorAll('.nav-item.sub');
+    if(subs[idx]) subs[idx].classList.add('active');
+  };
+});
+
+/* Demo 初始状态：默认未配置 = 全部显示（与真实默认语义一致）。
+   想看「已选择」效果，点上面的「选择推荐」或直接勾选。 */
+window.__droppedIds = [];
+
+syncPicks();
+</script>
+</body>
+</html>
